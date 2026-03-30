@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -12,6 +13,7 @@
     <!-- Static External CSS -->
     <link rel="stylesheet" href="./styles.css">
 </head>
+
 <body data-theme="light">
 
     <!-- Global App Loader -->
@@ -30,7 +32,7 @@
                     <i class="material-icons-outlined">close</i>
                 </button>
             </div>
-            
+
             <nav class="sidebar-nav">
                 <a href="#" class="nav-item active" data-view="dashboard" onclick="navigate('dashboard')">
                     <i class="material-icons-outlined">dashboard</i> Dashboard
@@ -44,7 +46,7 @@
                 <a href="#" class="nav-item" data-view="stock" onclick="navigate('stock')">
                     <i class="material-icons-outlined">inventory_2</i> Stock
                 </a>
-                
+
                 <div id="admin-menu" class="hidden">
                     <div class="nav-divider"></div>
                     <a href="#" class="nav-item" data-view="workers" onclick="navigate('workers')">
@@ -58,7 +60,7 @@
                     </a>
                 </div>
             </nav>
-            
+
             <div class="sidebar-footer">
                 <button class="nav-item logout-btn" onclick="logout()">
                     <i class="material-icons-outlined">logout</i> Logout
@@ -75,7 +77,7 @@
                     </button>
                     <h2 class="view-title" id="page-title">Dashboard</h2>
                 </div>
-                
+
                 <div class="right-nav">
                     <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">
                         <i class="material-icons-outlined">dark_mode</i>
@@ -92,7 +94,7 @@
 
             <div id="view-container" class="view-container"></div>
         </main>
-        
+
         <!-- Bottom Nav Bar -->
         <nav id="bottom-nav" class="bottom-nav">
             <a href="#" class="b-nav-item active" data-view="dashboard" onclick="navigate('dashboard')">
@@ -111,6 +113,20 @@
                 <i class="material-icons-outlined">menu</i><span>Menu</span>
             </a>
         </nav>
+
+        <!-- Global Modal Container -->
+        <div id="global-modal" class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-title">Modal Title</h3>
+                    <button class="icon-btn" onclick="closeModal()"><i
+                            class="material-icons-outlined">close</i></button>
+                </div>
+                <div class="modal-body" id="modal-body">
+                    <!-- Dynamic Content Injected Here -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Auth Container -->
@@ -119,7 +135,7 @@
             <div class="auth-box">
                 <i class="material-icons-outlined auth-icon">group_work</i>
                 <h2 class="auth-title">Aum ERP</h2>
-                
+
                 <form id="login-form" onsubmit="handleLogin(event)">
                     <div class="form-group" style="text-align: left;">
                         <label class="form-label">Phone Number</label>
@@ -127,11 +143,14 @@
                     </div>
                     <div class="form-group" style="text-align: left;">
                         <label class="form-label">Password</label>
-                        <input type="password" id="login-password" class="form-input" placeholder="Enter password" required>
+                        <input type="password" id="login-password" class="form-input" placeholder="Enter password"
+                            required>
                     </div>
-                    <button type="submit" class="btn-primary" id="login-btn"><span class="btn-text">Sign In</span></button>
+                    <button type="submit" class="btn-primary" id="login-btn"><span class="btn-text">Sign
+                            In</span></button>
                     <p style="margin-top: 16px; font-size: 14px; color: var(--text-secondary);">
-                        New worker? <a href="#" onclick="toggleAuthForm('signup')" style="color: var(--accent-primary); font-weight: 500;">Sign up</a>
+                        New worker? <a href="#" onclick="toggleAuthForm('signup')"
+                            style="color: var(--accent-primary); font-weight: 500;">Sign up</a>
                     </p>
                 </form>
 
@@ -146,11 +165,14 @@
                     </div>
                     <div class="form-group" style="text-align: left;">
                         <label class="form-label">Password</label>
-                        <input type="password" id="signup-password" class="form-input" placeholder="Create password" required>
+                        <input type="password" id="signup-password" class="form-input" placeholder="Create password"
+                            required>
                     </div>
-                    <button type="submit" class="btn-primary" id="signup-btn"><span class="btn-text">Register Attempt</span></button>
+                    <button type="submit" class="btn-primary" id="signup-btn"><span class="btn-text">Register
+                            Attempt</span></button>
                     <p style="margin-top: 16px; font-size: 14px; color: var(--text-secondary);">
-                        Already have an account? <a href="#" onclick="toggleAuthForm('login')" style="color: var(--accent-primary); font-weight: 500;">Sign in</a>
+                        Already have an account? <a href="#" onclick="toggleAuthForm('login')"
+                            style="color: var(--accent-primary); font-weight: 500;">Sign in</a>
                     </p>
                 </form>
             </div>
@@ -159,7 +181,7 @@
 
     <!-- HTML Templates Library -->
     <div id="templates" style="display:none;">
-        
+
         <!-- DASHBOARD VIEW -->
         <div id="template_dashboard">
             <div id="dash-admin" class="hidden">
@@ -167,33 +189,40 @@
                     <div class="stat-card">
                         <div class="stat-icon"><i class="material-icons-outlined">people</i></div>
                         <div class="stat-details">
-                            <h3>Total Workers</h3><p id="stat-workers">0</p>
+                            <h3>Total Workers</h3>
+                            <p id="stat-workers">0</p>
                         </div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon"><i class="material-icons-outlined">category</i></div>
                         <div class="stat-details">
-                            <h3>Total Products</h3><p id="stat-products">0</p>
+                            <h3>Total Products</h3>
+                            <p id="stat-products">0</p>
                         </div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon" style="color:var(--status-warning); background:rgba(245,158,11,0.1)"><i class="material-icons-outlined">warning</i></div>
+                        <div class="stat-icon" style="color:var(--status-warning); background:rgba(245,158,11,0.1)"><i
+                                class="material-icons-outlined">warning</i></div>
                         <div class="stat-details">
-                            <h3>Low Stock</h3><p id="stat-low-stock">0</p>
+                            <h3>Low Stock</h3>
+                            <p id="stat-low-stock">0</p>
                         </div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon" style="color:var(--status-success); background:rgba(16,185,129,0.1)"><i class="material-icons-outlined">check_circle</i></div>
+                        <div class="stat-icon" style="color:var(--status-success); background:rgba(16,185,129,0.1)"><i
+                                class="material-icons-outlined">check_circle</i></div>
                         <div class="stat-details">
-                            <h3>Today Dispatch</h3><p id="stat-dispatch">0</p>
+                            <h3>Today Dispatch</h3>
+                            <p id="stat-dispatch">0</p>
                         </div>
                     </div>
                 </div>
 
                 <div class="surface-card" style="margin-bottom:24px;">
                     <h3 style="margin-bottom:16px;">Job Work Progress</h3>
-                    <div style="height:300px; display:flex; align-items:center; justify-content:center; border:1px dashed var(--border-color); border-radius:var(--border-radius-md);">
-                       <p style="color:var(--text-secondary)">Chart component requires Chart.js</p>
+                    <div
+                        style="height:300px; display:flex; align-items:center; justify-content:center; border:1px dashed var(--border-color); border-radius:var(--border-radius-md);">
+                        <p style="color:var(--text-secondary)">Chart component requires Chart.js</p>
                     </div>
                 </div>
             </div>
@@ -212,41 +241,45 @@
                         <div class="stat-icon"><i class="material-icons-outlined">handyman</i></div>
                         <div class="stat-details">
                             <h3 style="color:var(--text-primary); font-weight:600;">My Job Work</h3>
-                            <p style="font-size:14px; color:var(--text-secondary); font-weight:normal;">View pending tasks</p>
+                            <p style="font-size:14px; color:var(--text-secondary); font-weight:normal;">View pending
+                                tasks</p>
                         </div>
                     </div>
                     <div class="stat-card" style="cursor:pointer;" onclick="navigate('stock')">
                         <div class="stat-icon"><i class="material-icons-outlined">inventory_2</i></div>
                         <div class="stat-details">
                             <h3 style="color:var(--text-primary); font-weight:600;">View Stock</h3>
-                            <p style="font-size:14px; color:var(--text-secondary); font-weight:normal;">Check raw materials</p>
+                            <p style="font-size:14px; color:var(--text-secondary); font-weight:normal;">Check raw
+                                materials</p>
                         </div>
                     </div>
                 </div>
             </div>
-            
+
             <script>
-            // Note: Inline scripts in innerHTML are often not evaluated dynamically. 
-            // The template JS functions should be defined in app.js instead.
-            function init_dashboard() {
-                if(!currentUser) return;
-                if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
-                    document.getElementById('dash-admin').classList.remove('hidden');
-                } else {
-                    document.getElementById('dash-worker').classList.remove('hidden');
-                    document.getElementById('worker-welcome').innerText = 'Welcome ' + currentUser.name + '!';
+                // Note: Inline scripts in innerHTML are often not evaluated dynamically. 
+                // The template JS functions should be defined in app.js instead.
+                function init_dashboard() {
+                    if (!currentUser) return;
+                    if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
+                        document.getElementById('dash-admin').classList.remove('hidden');
+                    } else {
+                        document.getElementById('dash-worker').classList.remove('hidden');
+                        document.getElementById('worker-welcome').innerText = 'Welcome ' + currentUser.name + '!';
+                    }
                 }
-            }
             </script>
         </div>
-        
+
         <!-- ATTENDANCE VIEW -->
         <div id="template_attendance">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
                 <h2 style="font-size: 24px; font-weight:600;">Time Tracking</h2>
                 <div id="att-controls" style="display:flex; gap:12px;">
-                    <button class="btn-primary" onclick="handleCheckIn()" id="btn-checkin" style="background:var(--status-success);width:auto;">Check In</button>
-                    <button class="btn-primary" onclick="handleCheckOut()" id="btn-checkout" style="background:var(--status-error);width:auto;display:none;">Check Out</button>
+                    <button class="btn-primary" onclick="handleCheckIn()" id="btn-checkin"
+                        style="background:var(--status-success);width:auto;">Check In</button>
+                    <button class="btn-primary" onclick="handleCheckOut()" id="btn-checkout"
+                        style="background:var(--status-error);width:auto;display:none;">Check Out</button>
                 </div>
             </div>
 
@@ -264,51 +297,136 @@
                             </tr>
                         </thead>
                         <tbody id="attendance-tbody">
-                            <tr><td colspan="5" style="padding:24px; text-align:center; color:var(--text-secondary);">No logs found for today.</td></tr>
+                            <tr>
+                                <td colspan="5" style="padding:24px; text-align:center; color:var(--text-secondary);">No
+                                    logs found for today.</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
-            
+
             <script>
-            function init_attendance() {
-                if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
-                    document.querySelectorAll('.admin-col').forEach(el => el.style.display = 'table-cell');
+                function init_attendance() {
+                    if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
+                        document.querySelectorAll('.admin-col').forEach(el => el.style.display = 'table-cell');
+                    }
                 }
-            }
-            
-            function handleCheckIn() {
-                document.getElementById('btn-checkin').innerText = "Wait...";
-                setTimeout(() => {
-                    document.getElementById('btn-checkin').style.display = 'none';
-                    document.getElementById('btn-checkout').style.display = 'block';
-                    document.getElementById('btn-checkout').innerText = "Check Out";
-                    Toast.show("Checked In successfully at " + new Date().toLocaleTimeString(), "success");
-                    
-                    document.getElementById('attendance-tbody').innerHTML = `
+
+                function handleCheckIn() {
+                    document.getElementById('btn-checkin').innerText = "Wait...";
+                    setTimeout(() => {
+                        document.getElementById('btn-checkin').style.display = 'none';
+                        document.getElementById('btn-checkout').style.display = 'block';
+                        document.getElementById('btn-checkout').innerText = "Check Out";
+                        Toast.show("Checked In successfully at " + new Date().toLocaleTimeString(), "success");
+
+                        document.getElementById('attendance-tbody').innerHTML = `
                         <tr style="border-bottom: 1px solid var(--border-color);">
                             <td style="padding: 12px 16px;">${new Date().toLocaleDateString()}</td>
-                            ${currentUser.role === 'Admin' ? '<td style="padding: 12px 16px;" class="admin-col">'+currentUser.name+'</td>' : ''}
+                            ${currentUser.role === 'Admin' ? '<td style="padding: 12px 16px;" class="admin-col">' + currentUser.name + '</td>' : ''}
                             <td style="padding: 12px 16px; color:var(--status-success); font-weight:600;">${new Date().toLocaleTimeString()}</td>
                             <td style="padding: 12px 16px; color:var(--status-error); font-weight:600;" id="m-out">-</td>
                             <td style="padding: 12px 16px;" id="m-hr">-</td>
                         </tr>
                     `;
-                }, 800);
-            }
+                    }, 800);
+                }
 
-            function handleCheckOut() {
-                document.getElementById('btn-checkout').innerText = "Wait...";
-                setTimeout(() => {
-                    document.getElementById('btn-checkout').style.display = 'none';
-                    document.getElementById('btn-checkin').style.display = 'block';
-                    document.getElementById('btn-checkin').innerText = "Check In";
-                    Toast.show("Checked Out successfully", "warning");
-                    document.getElementById('m-out').innerText = new Date().toLocaleTimeString();
-                    document.getElementById('m-hr').innerText = "Shift complete";
-                }, 800);
-            }
+                function handleCheckOut() {
+                    document.getElementById('btn-checkout').innerText = "Wait...";
+                    setTimeout(() => {
+                        document.getElementById('btn-checkout').style.display = 'none';
+                        document.getElementById('btn-checkin').style.display = 'block';
+                        document.getElementById('btn-checkin').innerText = "Check In";
+                        Toast.show("Checked Out successfully", "warning");
+                        document.getElementById('m-out').innerText = new Date().toLocaleTimeString();
+                        document.getElementById('m-hr').innerText = "Shift complete";
+                    }, 800);
+                }
             </script>
+        </div>
+
+        <!-- WORKERS VIEW -->
+        <div id="template_workers">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
+                <h2 style="font-size: 24px; font-weight:600;">Worker Management</h2>
+            </div>
+            <div class="surface-card">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Phone</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="workers-tbody">
+                            <tr>
+                                <td colspan="5" style="text-align:center;">Loading workers...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRODUCTS & MATERIALS VIEW -->
+        <div id="template_products">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
+                <h2 style="font-size: 24px; font-weight:600;">Products & Materials</h2>
+                <div style="display:flex; gap:12px;">
+                    <button class="btn-primary" onclick="openAddProductModal()" style="width: auto;"><i
+                            class="material-icons-outlined" style="vertical-align: middle; font-size:18px;">add</i>
+                        Product</button>
+                    <button class="btn-secondary" onclick="openAddMaterialModal()"><i class="material-icons-outlined"
+                            style="vertical-align: middle; font-size:18px;">add</i> Material</button>
+                </div>
+            </div>
+
+            <h3 style="margin-bottom:16px;">Finished Products</h3>
+            <div class="surface-card" style="margin-bottom: 24px;">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Brand</th>
+                                <th>Category</th>
+                                <th>Unit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="products-tbody">
+                            <tr>
+                                <td colspan="4" style="text-align:center;">Loading products...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <h3 style="margin-bottom:16px;">Raw Materials</h3>
+            <div class="surface-card">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Min Stock</th>
+                                <th>Unit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="materials-tbody">
+                            <tr>
+                                <td colspan="3" style="text-align:center;">Loading materials...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
     </div>
@@ -318,11 +436,11 @@
 
     <!-- Static JS Include -->
     <script src="./app.js"></script>
-    
+
     <!-- Manually map init functions from inline strings (Required because innerHTML Scripts don't run automatically) -->
     <script>
-        window.init_dashboard = function() {
-            if(!currentUser) return;
+        window.init_dashboard = function () {
+            if (!currentUser) return;
             if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
                 document.getElementById('dash-admin').classList.remove('hidden');
             } else {
@@ -331,21 +449,21 @@
             }
         };
 
-        window.init_attendance = function() {
-            if(!currentUser) return;
+        window.init_attendance = function () {
+            if (!currentUser) return;
             if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
                 document.querySelectorAll('.admin-col').forEach(el => el.style.display = 'table-cell');
             }
         };
 
-        window.handleCheckIn = function() {
+        window.handleCheckIn = function () {
             document.getElementById('btn-checkin').innerText = "Wait...";
             setTimeout(() => {
                 document.getElementById('btn-checkin').style.display = 'none';
                 document.getElementById('btn-checkout').style.display = 'block';
                 document.getElementById('btn-checkout').innerText = "Check Out";
-                if(window.Toast) Toast.show("Checked In at " + new Date().toLocaleTimeString(), "success");
-                
+                if (window.Toast) Toast.show("Checked In at " + new Date().toLocaleTimeString(), "success");
+
                 document.getElementById('attendance-tbody').innerHTML = `
                     <tr style="border-bottom: 1px solid var(--border-color);">
                         <td style="padding: 12px 16px;">${new Date().toLocaleDateString()}</td>
@@ -356,20 +474,29 @@
                 `;
             }, 800);
         };
-        
-        window.handleCheckOut = function() {
+
+        window.handleCheckOut = function () {
             document.getElementById('btn-checkout').innerText = "Wait...";
             setTimeout(() => {
                 document.getElementById('btn-checkout').style.display = 'none';
                 document.getElementById('btn-checkin').style.display = 'block';
                 document.getElementById('btn-checkin').innerText = "Check In";
-                if(window.Toast) Toast.show("Checked Out successfully", "warning");
-                if(document.getElementById('m-out')) {
-                   document.getElementById('m-out').innerText = new Date().toLocaleTimeString();
-                   document.getElementById('m-hr').innerText = "8.0 Hrs";
+                if (window.Toast) Toast.show("Checked Out successfully", "warning");
+                if (document.getElementById('m-out')) {
+                    document.getElementById('m-out').innerText = new Date().toLocaleTimeString();
+                    document.getElementById('m-hr').innerText = "8.0 Hrs";
                 }
             }, 800);
         };
+
+        // UI Triggers mapped to app.js
+        window.closeModal = function () { if (window.Modal) window.Modal.close(); };
+        window.openAddProductModal = function () { if (window.Modal) window.Modal.openAddProduct(); };
+        window.openAddMaterialModal = function () { if (window.Modal) window.Modal.openAddMaterial(); };
+
+        window.init_workers = function () { if (window.loadWorkers) window.loadWorkers(); };
+        window.init_products = function () { if (window.loadMasterData) window.loadMasterData(); };
     </script>
 </body>
+
 </html>
