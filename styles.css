@@ -1,63 +1,68 @@
 /* AUM ERP STYLESHEET (External CSS) */
 
-/* CSS Variables for Light / Dark Mode & Accent Colors */
+/* CSS Variables for Deep Dark Glassmorphic Theme */
 :root {
-    /* Main Accent Colors (Purple & Pink) */
-    --accent-primary: #8a2be2;
-    /* Blue Violet */
-    --accent-secondary: #ff1493;
-    /* Deep Pink */
+    /* Main Accent Colors (Neon Purple & Pink) */
+    --accent-primary: #8C52FF;
+    --accent-secondary: #FF2E93;
     --accent-gradient: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
 
-    /* Background & Surface Colors (Light Mode) */
-    --bg-main: #f4f6fa;
-    --bg-surface: #ffffff;
-    --bg-surface-elevated: #ffffff;
+    /* Background & Surface Colors (Dark Theme as Default) */
+    --bg-main: #0B0B14;
+    --bg-surface: #151522;
+    --bg-surface-elevated: #1F1F33;
+    --bg-glass: rgba(21, 21, 34, 0.6);
 
-    /* Text Colors (Light Mode) */
-    --text-primary: #1e1e24;
-    --text-secondary: #6b7280;
-    --text-disabled: #9ca3af;
+    /* Text Colors */
+    --text-primary: #ffffff;
+    --text-secondary: #8B8B9B;
+    --text-disabled: #4D4D61;
 
     /* Borders & Dividers */
-    --border-color: #e5e7eb;
+    --border-color: rgba(255, 255, 255, 0.08);
+    --border-glass: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 
     /* Status Colors */
-    --status-success: #10b981;
-    --status-warning: #f59e0b;
-    --status-error: #ef4444;
+    --status-success: #00E676;
+    --status-warning: #FFAB00;
+    --status-error: #FF3D71;
+    --status-info: #00BFFF;
 
     /* Base Dimensions & Shadows */
+    --border-radius-xl: 24px;
     --border-radius-lg: 16px;
     --border-radius-md: 12px;
     --border-radius-sm: 8px;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+    --shadow-glow: 0 0 20px rgba(140, 82, 255, 0.2);
 
     /* Animations */
     --transition-fast: 0.2s ease-in-out;
     --transition-normal: 0.3s ease-in-out;
 }
 
-[data-theme="dark"] {
-    /* Background & Surface Colors (Dark Mode) */
-    --bg-main: #0f172a;
-    /* Slate 900 */
-    --bg-surface: #1e293b;
-    /* Slate 800 */
-    --bg-surface-elevated: #334155;
-    /* Slate 700 */
+[data-theme="light"] {
+    /* Background & Surface Colors (Light Mode Fallback) */
+    --bg-main: #F4F5F8;
+    --bg-surface: #FFFFFF;
+    --bg-surface-elevated: #F9FAFC;
+    --bg-glass: rgba(255, 255, 255, 0.8);
 
-    /* Text Colors (Dark Mode) */
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
+    /* Text Colors (Light Mode) */
+    --text-primary: #12121A;
+    --text-secondary: #6B6B78;
 
     /* Borders & Dividers */
-    --border-color: #334155;
-
-    /* Shadow */
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+    --border-color: #E2E4E9;
+    --border-glass: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+    
+    /* Shadows */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.1);
+    --shadow-glow: 0 0 20px rgba(140, 82, 255, 0.15);
 }
 
 /* Global Reset */
@@ -307,18 +312,20 @@ body {
 
 .stat-card {
     background: var(--bg-surface);
-    padding: 20px;
-    border-radius: var(--border-radius-lg);
-    box-shadow: var(--shadow-md);
+    padding: 24px;
+    border-radius: var(--border-radius-xl);
+    box-shadow: var(--shadow-sm);
     display: flex;
     align-items: center;
     gap: 16px;
     border: 1px solid var(--border-color);
-    transition: transform var(--transition-fast);
+    box-shadow: var(--border-glass);
+    transition: all var(--transition-fast);
 }
 
 .stat-card:hover {
     transform: translateY(-4px);
+    box-shadow: var(--shadow-md), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 .stat-icon {
@@ -386,25 +393,26 @@ body {
     color: white;
     border: none;
     padding: 12px 24px;
-    border-radius: var(--border-radius-md);
+    border-radius: var(--border-radius-lg);
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(138, 43, 226, 0.3);
+    box-shadow: var(--shadow-glow);
     transition: all var(--transition-fast);
     width: 100%;
 }
 
 .btn-primary:hover {
-    box-shadow: 0 6px 16px rgba(138, 43, 226, 0.5);
+    filter: brightness(1.1);
     transform: translateY(-2px);
+    box-shadow: 0 0 30px rgba(140, 82, 255, 0.4);
 }
 
 /* Container generic Surface */
 .surface-card {
     background: var(--bg-surface);
-    border-radius: var(--border-radius-lg);
-    box-shadow: var(--shadow-sm);
+    border-radius: var(--border-radius-xl);
+    box-shadow: var(--shadow-sm), var(--border-glass);
     padding: 24px;
     border: 1px solid var(--border-color);
 }
@@ -544,22 +552,25 @@ body {
 .table-responsive {
     width: 100%;
     overflow-x: auto;
-    border-radius: var(--border-radius-sm);
+    border-radius: var(--border-radius-lg);
     border: 1px solid var(--border-color);
+    background: var(--bg-surface);
 }
 
 .data-table {
     width: 100%;
     border-collapse: collapse;
-    background: var(--bg-surface);
+    background: transparent;
 }
 
 .data-table th {
-    background: var(--bg-main);
+    background: rgba(0, 0, 0, 0.2);
     color: var(--text-secondary);
     font-weight: 600;
-    font-size: 14px;
-    padding: 12px 16px;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 16px;
     text-align: left;
     border-bottom: 2px solid var(--border-color);
 }
@@ -576,33 +587,37 @@ body {
 }
 
 .data-table tr:hover {
-    background-color: var(--bg-main);
+    background-color: rgba(255, 255, 255, 0.02);
 }
 
 /* Status Badges */
 .badge {
-    padding: 4px 10px;
-    border-radius: 20px;
+    padding: 6px 14px;
+    border-radius: 24px;
     font-size: 12px;
     font-weight: 600;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
+    border: 1px solid transparent;
 }
 
 .badge.active {
-    background: rgba(16, 185, 129, 0.1);
+    background: rgba(0, 230, 118, 0.1);
     color: var(--status-success);
+    border-color: rgba(0, 230, 118, 0.2);
 }
 
 .badge.pending {
-    background: rgba(245, 158, 11, 0.1);
+    background: rgba(255, 171, 0, 0.1);
     color: var(--status-warning);
+    border-color: rgba(255, 171, 0, 0.2);
 }
 
 .badge.neutral {
-    background: rgba(107, 114, 128, 0.1);
+    background: rgba(139, 139, 155, 0.1);
     color: var(--text-secondary);
+    border-color: rgba(139, 139, 155, 0.2);
 }
 
 /* ======== Modal / Dialogs ======== */

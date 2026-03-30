@@ -537,6 +537,38 @@ window.app_saveMaterial = function (e) {
 /* =========================================================================
    ATTENDANCE MODULE LOGIC
 ========================================================================= */
+let clockInterval = null;
+
+window.init_attendance = function () {
+    if (!currentUser) return;
+    if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
+        // Admin view modifications if any
+    }
+
+    // Start Clock
+    if (clockInterval) clearInterval(clockInterval);
+    
+    const updateClock = () => {
+        const timeEl = document.getElementById('clock-time');
+        const dateEl = document.getElementById('clock-date');
+        if (!timeEl || !dateEl) return;
+        
+        const now = new Date();
+        timeEl.innerText = now.toLocaleTimeString('en-US', { hour12: false });
+        dateEl.innerText = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    };
+    
+    updateClock();
+    clockInterval = setInterval(updateClock, 1000);
+
+    // Initial state setup based on local storage
+    if (localStorage.getItem('activeAttendanceRecordId')) {
+        loadAttendanceUI('active', 'Resumed');
+    } else {
+        loadAttendanceUI('inactive', null);
+    }
+};
+
 window.handleAttendanceAction = function (actionType) {
     if (!currentUser) return;
     
@@ -572,7 +604,6 @@ function executeAttendanceAPI(actionType, lat, lng) {
         apiCall('checkIn', payload, function(res) {
             Toast.show(res.message, 'success');
             localStorage.setItem('activeAttendanceRecordId', res.recordId);
-            // Optionally update UI buttons
             loadAttendanceUI('active', res.time);
         });
     } else {
@@ -586,6 +617,45 @@ function executeAttendanceAPI(actionType, lat, lng) {
             localStorage.removeItem('activeAttendanceRecordId');
             loadAttendanceUI('inactive', null);
         });
+    }
+}
+
+function loadAttendanceUI(state, time) {
+    const statusEl = document.getElementById('shift-status');
+    const tbody = document.getElementById('attendance-tbody');
+    
+    if (state === 'active') {
+        if(statusEl) statusEl.innerText = "Checked In — Active";
+    } else {
+        if(statusEl) statusEl.innerText = "Ready for Shift";
+    }
+
+    if (tbody && time) {
+        // Appending a dummy log simulation matching glass theme UI
+        tbody.innerHTML = `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+            <td style="padding: 16px;">1</td>
+            <td style="padding: 16px;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:bold;">${currentUser.name.charAt(0).toUpperCase()}</div>
+                    <span style="font-weight:600;">${currentUser.name}</span>
+                </div>
+            </td>
+            <td style="padding: 16px;">${new Date().toLocaleTimeString('en-US', {hour12:false})}</td>
+            <td style="padding: 16px; color:var(--text-secondary);">—</td>
+            <td style="padding: 16px;">Tracking...</td>
+            <td style="padding: 16px;">
+                 <span style="color:var(--status-success); font-weight:600; font-size:12px; display:flex; align-items:center; gap:4px;"><i class="material-icons-outlined" style="font-size:14px;">location_on</i> In Range</span>
+            </td>
+            <td style="padding: 16px;">
+                <div class="badge active"><i class="material-icons-outlined" style="font-size:14px;">check</i> Present</div>
+            </td>
+        </tr>`;
+    } else if (tbody && !time) {
+        // Keep logs if they exist or simulate empty
+        if (tbody.innerHTML.includes("Log data will populate here")) {
+           tbody.innerHTML = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Your daily shift has ended.</td></tr>`;
+        }
     }
 }
 

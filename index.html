@@ -85,15 +85,29 @@
                     <h2 class="view-title" id="page-title">Dashboard</h2>
                 </div>
 
+                <div class="center-nav desktop-only" style="flex:1; max-width: 400px; margin: 0 24px;">
+                    <div style="position:relative; width:100%;">
+                        <i class="material-icons-outlined" style="position:absolute; left:16px; top:50%; transform:translateY(-50%); color:var(--text-secondary); font-size:20px;">search</i>
+                        <input type="text" placeholder="Search anything..." style="width:100%; padding:10px 16px 10px 48px; border-radius:30px; border:1px solid var(--border-color); background:rgba(255,255,255,0.03); color:var(--text-primary); outline:none;">
+                    </div>
+                </div>
+
                 <div class="right-nav">
-                    <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">
-                        <i class="material-icons-outlined">dark_mode</i>
+                    <button class="icon-btn theme-toggle" onclick="toggleTheme()" id="themeBtn" title="Toggle Theme">
+                        <i class="material-icons-outlined" style="color:#FFAB00;">dark_mode</i>
                     </button>
-                    <div class="user-profile">
-                        <div class="avatar" id="user-avatar">?</div>
+                    <button class="icon-btn" title="Notifications">
+                        <i class="material-icons-outlined" style="color:#FFAB00;">notifications</i>
+                    </button>
+                    <button class="icon-btn" title="Messages">
+                        <i class="material-icons-outlined">chat_bubble_outline</i>
+                    </button>
+                    
+                    <div class="user-profile" style="margin-left: 12px; background:rgba(255,255,255,0.05); padding:6px 16px 6px 6px; border-radius:30px; cursor:pointer;">
+                        <div class="avatar" id="user-avatar" style="width:32px; height:32px; font-size:14px;">?</div>
                         <div class="user-info desktop-only">
-                            <span class="user-name" id="user-name">Guest</span>
-                            <span class="user-role" id="user-role">Worker</span>
+                            <span class="user-name" id="user-name" style="font-size:13px;">Guest</span>
+                            <span class="user-role" id="user-role" style="font-size:11px;">Worker</span>
                         </div>
                     </div>
                 </div>
@@ -280,78 +294,168 @@
 
         <!-- ATTENDANCE VIEW -->
         <div id="template_attendance">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
-                <h2 style="font-size: 24px; font-weight:600;">Time Tracking</h2>
-                <div id="att-controls" style="display:flex; gap:12px;">
-                    <button class="btn-primary" onclick="handleCheckIn()" id="btn-checkin"
-                        style="background:var(--status-success);width:auto;">Check In</button>
-                    <button class="btn-primary" onclick="handleCheckOut()" id="btn-checkout"
-                        style="background:var(--status-error);width:auto;display:none;">Check Out</button>
+            <!-- Header Row -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px; flex-wrap:wrap; gap:16px;">
+                <h2 style="font-size: 24px; font-weight:700; display:flex; align-items:center; gap:12px;">
+                    <span style="width:12px; height:12px; background:var(--accent-secondary); border-radius:50%; box-shadow:0 0 10px var(--accent-secondary);"></span>
+                    Attendance — Geo-Fenced
+                </h2>
+                <div style="display:flex; gap:12px;">
+                    <button class="btn-secondary" style="border-radius:20px; background:rgba(255,255,255,0.05); border:none;"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle; color:var(--status-info);">summarize</i> Monthly Report</button>
+                    <button class="btn-primary" style="border-radius:20px; width:auto; padding:10px 20px; background:var(--accent-gradient); box-shadow:0 0 15px rgba(140,82,255,0.4);"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle;">settings</i> Configure Fence</button>
                 </div>
             </div>
 
+            <!-- Dashboard Grid -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom:24px;">
+                
+                <!-- Left Column: Interactions -->
+                <div style="display:flex; flex-direction:column; gap:20px;">
+                    
+                    <!-- Digital Clock -->
+                    <div class="surface-card" style="position:relative; overflow:hidden; border:1px solid rgba(255,46,147,0.3); text-align:center; padding:32px 24px;">
+                        <div style="position:absolute; top:-50px; left:50%; transform:translateX(-50%); width:200px; height:200px; background:radial-gradient(circle, rgba(255,46,147,0.15) 0%, transparent 70%); z-index:0;"></div>
+                        <div style="position:relative; z-index:1;">
+                            <h1 id="clock-time" style="font-size: 56px; font-weight:700; font-family:monospace; color:var(--text-primary); letter-spacing:4px; margin-bottom:8px;">00:00:00</h1>
+                            <p id="clock-date" style="color:var(--text-secondary); margin-bottom:16px;">Loading Date...</p>
+                            <div style="display:inline-flex; align-items:center; gap:8px; color:var(--status-success); font-weight:600; font-size:14px;">
+                                <span style="width:8px; height:8px; background:var(--status-success); border-radius:50%;"></span>
+                                <span id="shift-status">Ready for Shift</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2x2 Action Buttons -->
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                        <div id="btn-checkin" class="surface-card" onclick="handleCheckIn()" style="padding:20px; text-align:center; cursor:pointer; border:1px solid rgba(0,230,118,0.2); transition:transform 0.2s;">
+                            <i class="material-icons-outlined" style="font-size:36px; color:var(--status-success); margin-bottom:8px; display:block;">check_box</i>
+                            <h3 style="color:var(--status-success); font-size:16px;">Check In</h3>
+                            <p style="font-size:12px; color:var(--text-secondary);">Start your shift</p>
+                        </div>
+                        <div id="btn-checkout" class="surface-card" onclick="handleCheckOut()" style="padding:20px; text-align:center; cursor:pointer; border:1px solid rgba(255,61,113,0.2); transition:transform 0.2s;">
+                            <i class="material-icons-outlined" style="font-size:36px; color:var(--status-error); margin-bottom:8px; display:block;">door_front</i>
+                            <h3 style="color:var(--status-error); font-size:16px;">Check Out</h3>
+                            <p style="font-size:12px; color:var(--text-secondary);">End shift</p>
+                        </div>
+                        <div class="surface-card" style="padding:20px; text-align:center; cursor:pointer; border:1px solid rgba(255,171,0,0.2); transition:transform 0.2s;">
+                            <i class="material-icons-outlined" style="font-size:36px; color:var(--status-warning); margin-bottom:8px; display:block;">pause</i>
+                            <h3 style="color:var(--status-warning); font-size:16px;">Pause</h3>
+                            <p style="font-size:12px; color:var(--text-secondary);">Short break</p>
+                        </div>
+                        <div class="surface-card" style="padding:20px; text-align:center; cursor:pointer; border:1px solid rgba(0,191,255,0.2); transition:transform 0.2s;">
+                            <i class="material-icons-outlined" style="font-size:36px; color:var(--status-info); margin-bottom:8px; display:block;">play_arrow</i>
+                            <h3 style="color:var(--status-info); font-size:16px;">Resume</h3>
+                            <p style="font-size:12px; color:var(--text-secondary);">Back to work</p>
+                        </div>
+                    </div>
+
+                    <!-- Info Card -->
+                    <div class="surface-card" style="display:flex; align-items:center; gap:16px; border:1px solid rgba(255,46,147,0.15); padding:16px;">
+                        <i class="material-icons-outlined" style="color:var(--accent-secondary); font-size:24px;">radar</i>
+                        <div>
+                            <h4 style="color:var(--accent-secondary); margin-bottom:4px;">Auto-Pause Active</h4>
+                            <p style="font-size:12px; color:var(--text-secondary);">Shift auto-pauses when worker leaves 200m geo-fence. Auto-resumes on return.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Visualization -->
+                <div style="display:flex; flex-direction:column; gap:20px;">
+                    
+                    <!-- Radar Graphic Map -->
+                    <div class="surface-card" style="position:relative; height:260px; display:flex; flex-direction:column;">
+                        <div style="display:flex; justify-content:space-between; z-index:2;">
+                            <div style="font-weight:600; font-size:14px; display:flex; align-items:center; gap:6px;"><i class="material-icons-outlined" style="font-size:16px; color:var(--accent-secondary);">location_on</i> AUM Factory, Surat</div>
+                        </div>
+                        <div style="flex:1; position:relative; overflow:hidden; background:radial-gradient(circle at center, rgba(140,82,255,0.1) 0%, transparent 60%); display:flex; align-items:center; justify-content:center; margin-top:10px; border-radius:12px;">
+                            <!-- Grid lines -->
+                            <div style="position:absolute; width:100%; height:100%; background-image:linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size:20px 20px;"></div>
+                            
+                            <!-- Radar Rings -->
+                            <div style="position:absolute; width:160px; height:160px; border:1px dashed rgba(140,82,255,0.5); border-radius:50%; animation:spin 20s linear infinite;"></div>
+                            <div style="position:absolute; width:100px; height:100px; border:1px dashed rgba(140,82,255,0.3); border-radius:50%; animation:spin 10s linear infinite reverse;"></div>
+                            
+                            <!-- Dots representing workers -->
+                            <div style="position:absolute; width:24px; height:24px; background:var(--status-success); border-radius:50%; transform:translate(-20px, 10px); color:#000; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; box-shadow:0 0 10px var(--status-success);">S</div>
+                            <div style="position:absolute; width:24px; height:24px; background:var(--status-success); border-radius:50%; transform:translate(30px, -20px); color:#000; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; box-shadow:0 0 10px var(--status-success);">P</div>
+                            <div style="position:absolute; width:24px; height:24px; background:var(--status-warning); border-radius:50%; transform:translate(10px, 30px); color:#000; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; box-shadow:0 0 10px var(--status-warning);">M</div>
+                            <div style="position:absolute; width:24px; height:24px; background:var(--status-error); border-radius:50%; transform:translate(80px, 20px); color:#fff; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; box-shadow:0 0 10px var(--status-error);">V</div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; font-size:12px; color:var(--text-secondary);">
+                            <div style="display:flex; gap:12px;">
+                                <span><span style="color:var(--status-success);">●</span> In</span>
+                                <span><span style="color:var(--status-warning);">●</span> Edge</span>
+                                <span><span style="color:var(--status-error);">●</span> Out</span>
+                            </div>
+                            <div class="badge active" style="font-size:10px;">18 / 24 In Range</div>
+                        </div>
+                    </div>
+
+                    <!-- Today's Summary -->
+                    <div class="surface-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                            <h3 style="font-size:16px;">Today's Summary</h3>
+                            <div class="badge" style="background:rgba(0,191,255,0.1); color:var(--status-info);">Today</div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; text-align:center;">
+                            <div>
+                                <div style="font-size:28px; font-weight:700; color:var(--status-success); margin-bottom:4px;">18</div>
+                                <div style="font-size:12px; color:var(--text-secondary);">Present</div>
+                            </div>
+                            <div>
+                                <div style="font-size:28px; font-weight:700; color:var(--status-error); margin-bottom:4px;">4</div>
+                                <div style="font-size:12px; color:var(--text-secondary);">Absent</div>
+                            </div>
+                            <div>
+                                <div style="font-size:28px; font-weight:700; color:var(--status-warning); margin-bottom:4px;">2</div>
+                                <div style="font-size:12px; color:var(--text-secondary);">Paused</div>
+                            </div>
+                            <div>
+                                <div style="font-size:28px; font-weight:700; color:var(--status-error); margin-bottom:4px;">1</div>
+                                <div style="font-size:12px; color:var(--text-secondary);">Outside</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attendance Data Table -->
             <div class="surface-card">
-                <h3 style="margin-bottom: 16px;">Recent Logs</h3>
-                <div style="overflow-x:auto;">
-                    <table style="width:100%; border-collapse: collapse; text-align: left;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:12px;">
+                    <h3 style="display:flex; align-items:center; gap:8px;"><i class="material-icons-outlined" style="color:var(--accent-secondary);">receipt_long</i> Attendance Log</h3>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button class="btn-secondary" style="border-radius:20px; padding:6px 16px; background:rgba(140,82,255,0.1); color:var(--accent-primary); border-color:var(--accent-primary);">All</button>
+                        <button class="btn-secondary" style="border-radius:20px; padding:6px 16px; border:none;">Present</button>
+                        <button class="btn-secondary" style="border-radius:20px; padding:6px 16px; border:none;">Absent</button>
+                        <span style="width:1px; height:20px; background:var(--border-color); margin:0 8px;"></span>
+                        <button class="btn-secondary" style="border-radius:20px; padding:6px 16px;"><i class="material-icons-outlined" style="font-size:14px; vertical-align:middle;">download</i> Export</button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="data-table">
                         <thead>
-                            <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-secondary);">
-                                <th style="padding: 12px 16px;">Date</th>
-                                <th style="padding: 12px 16px; display:none;" class="admin-col">Worker</th>
-                                <th style="padding: 12px 16px;">Check In</th>
-                                <th style="padding: 12px 16px;">Check Out</th>
-                                <th style="padding: 12px 16px;">Total Hours</th>
+                            <tr>
+                                <th style="width:40px;">#</th>
+                                <th>Worker</th>
+                                <th>Check In</th>
+                                <th>Check Out</th>
+                                <th>Duration</th>
+                                <th>Location</th>
+                                <th>Status</th>
                             </tr>
                         </thead>
                         <tbody id="attendance-tbody">
                             <tr>
-                                <td colspan="5" style="padding:24px; text-align:center; color:var(--text-secondary);">No
-                                    logs found for today.</td>
+                                <td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Log data will populate here.</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
-
-            <script>
-                function init_attendance() {
-                    if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
-                        document.querySelectorAll('.admin-col').forEach(el => el.style.display = 'table-cell');
-                    }
-                }
-
-                function handleCheckIn() {
-                    document.getElementById('btn-checkin').innerText = "Wait...";
-                    setTimeout(() => {
-                        document.getElementById('btn-checkin').style.display = 'none';
-                        document.getElementById('btn-checkout').style.display = 'block';
-                        document.getElementById('btn-checkout').innerText = "Check Out";
-                        Toast.show("Checked In successfully at " + new Date().toLocaleTimeString(), "success");
-
-                        document.getElementById('attendance-tbody').innerHTML = `
-                        <tr style="border-bottom: 1px solid var(--border-color);">
-                            <td style="padding: 12px 16px;">${new Date().toLocaleDateString()}</td>
-                            ${currentUser.role === 'Admin' ? '<td style="padding: 12px 16px;" class="admin-col">' + currentUser.name + '</td>' : ''}
-                            <td style="padding: 12px 16px; color:var(--status-success); font-weight:600;">${new Date().toLocaleTimeString()}</td>
-                            <td style="padding: 12px 16px; color:var(--status-error); font-weight:600;" id="m-out">-</td>
-                            <td style="padding: 12px 16px;" id="m-hr">-</td>
-                        </tr>
-                    `;
-                    }, 800);
-                }
-
-                function handleCheckOut() {
-                    document.getElementById('btn-checkout').innerText = "Wait...";
-                    setTimeout(() => {
-                        document.getElementById('btn-checkout').style.display = 'none';
-                        document.getElementById('btn-checkin').style.display = 'block';
-                        document.getElementById('btn-checkin').innerText = "Check In";
-                        Toast.show("Checked Out successfully", "warning");
-                        document.getElementById('m-out').innerText = new Date().toLocaleTimeString();
-                        document.getElementById('m-hr').innerText = "Shift complete";
-                    }, 800);
-                }
-            </script>
+            <style>
+                @keyframes spin { 100% { transform: rotate(360deg); } }
+            </style>
         </div>
 
         <!-- WORKERS VIEW -->
@@ -511,6 +615,34 @@
             </div>
         </div>
 
+        <!-- STOCK VIEW -->
+        <div id="template_stock">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
+                <h2 style="font-size: 24px; font-weight:600;">Inventory Management</h2>
+            </div>
+            <div class="surface-card" style="text-align:center; padding: 48px;">
+                <div style="width:64px; height:64px; background:rgba(140,82,255,0.1); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px;">
+                    <i class="material-icons-outlined" style="font-size:32px; color:var(--accent-primary);">inventory_2</i>
+                </div>
+                <h3>Stock Module Under Construction</h3>
+                <p style="color:var(--text-secondary); margin-top:8px;">This module will be deeply integrated in Phase 4.</p>
+            </div>
+        </div>
+
+        <!-- REPORTS VIEW -->
+        <div id="template_reports">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
+                <h2 style="font-size: 24px; font-weight:600;">System Reports</h2>
+            </div>
+            <div class="surface-card" style="text-align:center; padding: 48px;">
+                <div style="width:64px; height:64px; background:rgba(140,82,255,0.1); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px;">
+                    <i class="material-icons-outlined" style="font-size:32px; color:var(--accent-primary);">pie_chart</i>
+                </div>
+                <h3>Reports Builder Coming Soon</h3>
+                <p style="color:var(--text-secondary); margin-top:8px;">Attendance and payment reports will appear here in Phase 5.</p>
+            </div>
+        </div>
+
     </div>
 
     <!-- Toasts / Notifications -->
@@ -541,22 +673,11 @@
             }
         };
 
-        window.init_attendance = function () {
-            if (!currentUser) return;
-            if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
-                document.querySelectorAll('.admin-col').forEach(el => el.style.display = 'table-cell');
-            }
-        };
-
         window.init_jobwork = function () {
             if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
                 document.querySelectorAll('#template_jobwork .admin-col').forEach(el => el.style.display = 'block');
             }
             if (window.loadJobWork) window.loadJobWork();
-        };
-
-        window.init_settings = function() {
-            if (window.init_settings) window.init_settings();
         };
 
         window.handleCheckIn = function () { if (window.handleAttendanceAction) window.handleAttendanceAction('in'); };
