@@ -4,7 +4,7 @@
    CONFIG
 ========================================================================= */
 // Replace this with the URL you get after deploying your Google Apps Script Web App
-const APPS_SCRIPT_WEB_APP_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
+const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzSrhyBy4Kla9SLNwVGfPgnbvmkgYYJGCsWGanfS3ushzIP3zTwBkqlkrVL6ucF-NCd/exec";
 
 /* =========================================================================
    CORE STATE & INITIALIZATION
