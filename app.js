@@ -815,30 +815,48 @@ window.app_submitSettleJob = function(e, jobId, price, maxQty) {
    SETTINGS MODULE LOGIC
 ========================================================================= */
 window.init_settings = function() {
-    // Populate existing configs
-    if (window.AppConfig) {
-        let isReq = window.AppConfig['GeoLocationRequired'] === 'true' || window.AppConfig['GeoLocationRequired'] === true;
-        document.getElementById('set-gps-req').checked = isReq;
-        
-        let lat = window.AppConfig['OfficeLat'];
-        if (lat) document.getElementById('set-lat').value = lat;
+    // Determine the active inputs inside view-container
+    const vc = document.getElementById('view-container');
+    if (!vc) return;
+    
+    const setGps = vc.querySelector('#set-gps-req');
+    const setLat = vc.querySelector('#set-lat');
+    const setLng = vc.querySelector('#set-lng');
 
-        let lng = window.AppConfig['OfficeLng'];
-        if (lng) document.getElementById('set-lng').value = lng;
+    const applyConfig = (configs) => {
+        if (!configs) return;
+        let isReq = configs['GeoLocationRequired'] === 'true' || configs['GeoLocationRequired'] === true;
+        if (setGps) setGps.checked = isReq;
+        if (setLat && configs['OfficeLat']) setLat.value = configs['OfficeLat'];
+        if (setLng && configs['OfficeLng']) setLng.value = configs['OfficeLng'];
+    };
+
+    if (window.AppConfig && Object.keys(window.AppConfig).length > 0) {
+        applyConfig(window.AppConfig);
+    } else {
+        // Fetch from server if not cached yet
+        let btn = vc.querySelector('button[type="submit"]');
+        if (btn) btn.innerText = "Loading...";
+        apiCall('getGlobalConfig', {}, function (configs) {
+            window.AppConfig = configs || {};
+            applyConfig(window.AppConfig);
+            if (btn) btn.innerHTML = '<i class="material-icons-outlined" style="vertical-align:middle; font-size:18px;">save</i> Save Config';
+        }, null, true);
     }
 };
 
 window.app_saveSettings = function(e) {
     e.preventDefault();
+    const vc = document.getElementById('view-container');
     let payload = {
-        GeoLocationRequired: document.getElementById('set-gps-req').checked ? "true" : "false",
-        OfficeLat: document.getElementById('set-lat').value,
-        OfficeLng: document.getElementById('set-lng').value
+        GeoLocationRequired: vc.querySelector('#set-gps-req').checked ? "true" : "false",
+        OfficeLat: vc.querySelector('#set-lat').value,
+        OfficeLng: vc.querySelector('#set-lng').value
     };
     
     apiCall('saveGlobalConfig', payload, function(res) {
         Toast.show("Settings properly uploaded to database.", "success");
-        // Update local cache
+        // Update local cache and force reflect on template as backup
         window.AppConfig = payload;
     });
 };
