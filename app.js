@@ -578,12 +578,15 @@ window.init_attendance = function () {
         if (!timeEl || !dateEl) return;
         
         const now = new Date();
-        timeEl.innerText = now.toLocaleTimeString('en-US', { hour12: false });
+        const state = localStorage.getItem('att_shiftState') || 'not_started';
         dateEl.innerText = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         
-        // Update Table row details if tracking
-        if (currentState !== 'not_started') {
+        // Show Stop Watch Time if checked in, else show normal 00:00:00 or system time
+        if (state !== 'not_started') {
+            timeEl.innerText = calculateCurrentDurationString();
             refreshActiveTableRow();
+        } else {
+            timeEl.innerText = "00:00:00"; // Stop watch is zeroed out
         }
     };
     
@@ -1076,6 +1079,7 @@ window.init_settings = function () {
     const setGps = vc.querySelector('#set-gps-req');
     const setLat = vc.querySelector('#set-lat');
     const setLng = vc.querySelector('#set-lng');
+    const setRadius = vc.querySelector('#set-radius');
 
     const applyConfig = (configs) => {
         if (!configs) return;
@@ -1083,6 +1087,7 @@ window.init_settings = function () {
         if (setGps) setGps.checked = isReq;
         if (setLat && configs['OfficeLat']) setLat.value = configs['OfficeLat'];
         if (setLng && configs['OfficeLng']) setLng.value = configs['OfficeLng'];
+        if (setRadius && configs['GeoFenceRadius']) setRadius.value = configs['GeoFenceRadius'];
     };
 
     if (window.AppConfig && Object.keys(window.AppConfig).length > 0) {
@@ -1105,7 +1110,8 @@ window.app_saveSettings = function (e) {
     let payload = {
         GeoLocationRequired: vc.querySelector('#set-gps-req').checked ? "true" : "false",
         OfficeLat: vc.querySelector('#set-lat').value,
-        OfficeLng: vc.querySelector('#set-lng').value
+        OfficeLng: vc.querySelector('#set-lng').value,
+        GeoFenceRadius: vc.querySelector('#set-radius').value
     };
 
     apiCall('saveGlobalConfig', payload, function (res) {
