@@ -271,16 +271,16 @@ function animateValue(id, start, end, duration) {
 }
 
 const SkeletonBuilder = {
-    generateTr: function(cols) {
+    generateTr: function (cols) {
         let tds = '';
-        for(let i=0; i<cols; i++) {
+        for (let i = 0; i < cols; i++) {
             tds += `<td><div class="skeleton-box" style="width: ${Math.floor(Math.random() * 40 + 60)}%;"></div></td>`;
         }
         return `<tr class="skeleton-row">${tds}</tr>`;
     },
-    generateTable: function(rows, cols) {
+    generateTable: function (rows, cols) {
         let html = '';
-        for(let i=0; i<rows; i++) html += this.generateTr(cols);
+        for (let i = 0; i < rows; i++) html += this.generateTr(cols);
         return html;
     }
 };
@@ -403,7 +403,7 @@ window.Modal = {
 window.loadWorkers = function () {
     const tbody = document.getElementById('workers-tbody');
     if (!tbody) return;
-    
+
     // Inject smooth skeleton loading instead of blocking everything
     tbody.innerHTML = SkeletonBuilder.generateTable(4, 5);
 
@@ -451,15 +451,15 @@ window.app_saveWorker = function (e, workerId) {
 window.loadMasterData = function () {
     const tbodyProd = document.getElementById('products-tbody');
     const tbodyMat = document.getElementById('materials-tbody');
-    
-    if(tbodyProd) tbodyProd.innerHTML = SkeletonBuilder.generateTable(3, 4);
-    if(tbodyMat) tbodyMat.innerHTML = SkeletonBuilder.generateTable(3, 3);
+
+    if (tbodyProd) tbodyProd.innerHTML = SkeletonBuilder.generateTable(3, 4);
+    if (tbodyMat) tbodyMat.innerHTML = SkeletonBuilder.generateTable(3, 3);
 
     // Load Products
     apiCall('getProducts', {}, function (data) {
         if (!tbodyProd) return;
         window.cachedProducts = data || []; // Cache for parent dropdowns
-        
+
         if (!data || data.length === 0) {
             tbodyProd.innerHTML = '<tr><td colspan="5" style="text-align:center;">No products found.</td></tr>';
         } else {
@@ -479,7 +479,7 @@ window.loadMasterData = function () {
             tbodyProd.innerHTML = html;
         }
     }, null, true);
-    
+
     // Load Materials
     apiCall('getRawMaterials', {}, function (data) {
         if (!tbodyMat) return;
@@ -513,7 +513,7 @@ window.app_saveProduct = function (e) {
 };
 
 // Expose advanced Modal Triggers mapped in index.html
-window.triggerAddProduct = function() {
+window.triggerAddProduct = function () {
     let parentOpts = (window.cachedProducts || [])
         .filter(p => !p.ParentProductID) // Only mains
         .map(p => `<option value="${p.ID}">${p.Name}</option>`).join('');
@@ -547,17 +547,17 @@ window.init_attendance = function () {
 
     // Start Clock
     if (clockInterval) clearInterval(clockInterval);
-    
+
     const updateClock = () => {
         const timeEl = document.getElementById('clock-time');
         const dateEl = document.getElementById('clock-date');
         if (!timeEl || !dateEl) return;
-        
+
         const now = new Date();
         timeEl.innerText = now.toLocaleTimeString('en-US', { hour12: false });
         dateEl.innerText = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     };
-    
+
     updateClock();
     clockInterval = setInterval(updateClock, 1000);
 
@@ -571,18 +571,18 @@ window.init_attendance = function () {
 
 window.handleAttendanceAction = function (actionType) {
     if (!currentUser) return;
-    
+
     // Check if GPS is required
     let requireGps = (window.AppConfig && window.AppConfig['GeoLocationRequired'] === 'true');
-    
+
     if (requireGps) {
         if (navigator.geolocation) {
             Loader.show();
             navigator.geolocation.getCurrentPosition(
-                function(position) {
+                function (position) {
                     executeAttendanceAPI(actionType, position.coords.latitude, position.coords.longitude);
                 },
-                function(error) {
+                function (error) {
                     Loader.hide();
                     Toast.show("Location access required for Attendance.", "error");
                 },
@@ -598,10 +598,10 @@ window.handleAttendanceAction = function (actionType) {
 
 function executeAttendanceAPI(actionType, lat, lng) {
     let payload = { workerId: currentUser.id, lat: lat, lng: lng };
-    
+
     // We store the RecordID locally for checkout mapping
     if (actionType === 'in') {
-        apiCall('checkIn', payload, function(res) {
+        apiCall('checkIn', payload, function (res) {
             Toast.show(res.message, 'success');
             localStorage.setItem('activeAttendanceRecordId', res.recordId);
             loadAttendanceUI('active', res.time);
@@ -612,7 +612,7 @@ function executeAttendanceAPI(actionType, lat, lng) {
             Toast.show("No active check-in found.", "error");
             return;
         }
-        apiCall('checkOut', payload, function(res) {
+        apiCall('checkOut', payload, function (res) {
             Toast.show(res.message, 'success');
             localStorage.removeItem('activeAttendanceRecordId');
             loadAttendanceUI('inactive', null);
@@ -623,11 +623,11 @@ function executeAttendanceAPI(actionType, lat, lng) {
 function loadAttendanceUI(state, time) {
     const statusEl = document.getElementById('shift-status');
     const tbody = document.getElementById('attendance-tbody');
-    
+
     if (state === 'active') {
-        if(statusEl) statusEl.innerText = "Checked In — Active";
+        if (statusEl) statusEl.innerText = "Checked In — Active";
     } else {
-        if(statusEl) statusEl.innerText = "Ready for Shift";
+        if (statusEl) statusEl.innerText = "Ready for Shift";
     }
 
     if (tbody && time) {
@@ -641,7 +641,7 @@ function loadAttendanceUI(state, time) {
                     <span style="font-weight:600;">${currentUser.name}</span>
                 </div>
             </td>
-            <td style="padding: 16px;">${new Date().toLocaleTimeString('en-US', {hour12:false})}</td>
+            <td style="padding: 16px;">${new Date().toLocaleTimeString('en-US', { hour12: false })}</td>
             <td style="padding: 16px; color:var(--text-secondary);">—</td>
             <td style="padding: 16px;">Tracking...</td>
             <td style="padding: 16px;">
@@ -654,7 +654,7 @@ function loadAttendanceUI(state, time) {
     } else if (tbody && !time) {
         // Keep logs if they exist or simulate empty
         if (tbody.innerHTML.includes("Log data will populate here")) {
-           tbody.innerHTML = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Your daily shift has ended.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Your daily shift has ended.</td></tr>`;
         }
     }
 }
@@ -672,7 +672,7 @@ window.loadJobWork = function () {
     // Tab UI Update
     document.getElementById('tab-active-jobs').style.borderBottom = currentJobTab === 'active' ? '2px solid var(--accent-primary)' : 'none';
     document.getElementById('tab-active-jobs').style.color = currentJobTab === 'active' ? 'var(--accent-primary)' : 'var(--text-secondary)';
-    
+
     document.getElementById('tab-settled-jobs').style.borderBottom = currentJobTab === 'settled' ? '2px solid var(--accent-primary)' : 'none';
     document.getElementById('tab-settled-jobs').style.color = currentJobTab === 'settled' ? 'var(--accent-primary)' : 'var(--text-secondary)';
 
@@ -695,10 +695,10 @@ window.loadJobWork = function () {
             let statusBadge = 'neutral';
             if (job.Status === 'Received') statusBadge = 'active';
             if (job.Status === 'Pending') statusBadge = 'warning';
-            
+
             // Reconstruct Worker and Material Name (Ideally from backend ID join, but we will show IDs for demo if we don't have lookup maps. Wait, we lack a quick lookup map on frontend. Let's just create a generic view.)
-            let workerName = (currentUser.role === 'Worker') ? "You" : `Worker ID: ${job.JobWorkerID.substring(0,4)}`;
-            let materialName = `Material ID: ${job.RawMaterialID.substring(0,4)}`;
+            let workerName = (currentUser.role === 'Worker') ? "You" : `Worker ID: ${job.JobWorkerID.substring(0, 4)}`;
+            let materialName = `Material ID: ${job.RawMaterialID.substring(0, 4)}`;
 
             // Actions mapping
             let actionsHTML = '';
@@ -713,7 +713,7 @@ window.loadJobWork = function () {
                     actionsHTML = `<span style="font-size:12px; color:var(--status-success);">Fully Settled</span>`;
                 }
             } else {
-                 actionsHTML = `<span style="font-size:12px; color:var(--text-secondary);">View Only</span>`;
+                actionsHTML = `<span style="font-size:12px; color:var(--text-secondary);">View Only</span>`;
             }
 
             html += `<tr style="animation: fadeIn 0.4s ease-out;">
@@ -724,9 +724,9 @@ window.loadJobWork = function () {
                         <td>${actionsHTML}</td>
                     </tr>`;
         });
-        
+
         tbody.innerHTML = html || '<tr><td colspan="5" style="text-align:center;">No jobs match this filter.</td></tr>';
-        
+
     }, null, true);
 };
 
@@ -741,20 +741,20 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Modals Setup
-window.triggerIssueJob = function() {
+window.triggerIssueJob = function () {
     // We need list of Workers and Materials.
     Modal.open("Issue Job", "<div style='text-align:center; padding: 20px;'><div class='spinner' style='width:30px;height:30px;margin: 0 auto 10px;'></div><p>Fetching resources...</p></div>");
-    
+
     Promise.all([
-        fetch(APPS_SCRIPT_WEB_APP_URL, { method: 'POST', body: JSON.stringify({ action: 'getWorkers', data: {} }), headers: {'Content-Type': 'text/plain;charset=utf-8'} }).then(res => res.json()),
-        fetch(APPS_SCRIPT_WEB_APP_URL, { method: 'POST', body: JSON.stringify({ action: 'getRawMaterials', data: {} }), headers: {'Content-Type': 'text/plain;charset=utf-8'} }).then(res => res.json())
+        fetch(APPS_SCRIPT_WEB_APP_URL, { method: 'POST', body: JSON.stringify({ action: 'getWorkers', data: {} }), headers: { 'Content-Type': 'text/plain;charset=utf-8' } }).then(res => res.json()),
+        fetch(APPS_SCRIPT_WEB_APP_URL, { method: 'POST', body: JSON.stringify({ action: 'getRawMaterials', data: {} }), headers: { 'Content-Type': 'text/plain;charset=utf-8' } }).then(res => res.json())
     ]).then(responses => {
         let workers = responses[0].data || [];
         let materials = responses[1].data || [];
-        
-        let wOptions = workers.filter(w=>w.Status === 'Active').map(w => `<option value="${w.ID}">${w.Name}</option>`).join('');
+
+        let wOptions = workers.filter(w => w.Status === 'Active').map(w => `<option value="${w.ID}">${w.Name}</option>`).join('');
         let mOptions = materials.map(m => `<option value="${m.ID}">${m.Name} (${m.Unit})</option>`).join('');
-        
+
         let html = `
             <form onsubmit="app_submitIssueJob(event)">
                 <div class="form-group">
@@ -779,31 +779,31 @@ window.triggerIssueJob = function() {
     });
 };
 
-window.app_submitIssueJob = function(e) {
+window.app_submitIssueJob = function (e) {
     e.preventDefault();
     let payload = {
         workerId: document.getElementById('iss-worker').value,
         materialId: document.getElementById('iss-material').value,
         qty: document.getElementById('iss-qty').value
     };
-    apiCall('issueJob', payload, function(res) {
+    apiCall('issueJob', payload, function (res) {
         Toast.show(res.message, 'success');
         Modal.close();
         loadJobWork();
     });
 };
 
-Modal.openReceiveJob = function(jobId) {
+Modal.openReceiveJob = function (jobId) {
     Modal.open("Receive Job", "<div style='text-align:center; padding: 20px;'><div class='spinner' style='width:30px;height:30px;margin: 0 auto 10px;'></div><p>Fetching Products...</p></div>");
-    
+
     // Fetch products to bind as the Finished Good
-    apiCall('getProducts', {}, function(data) {
+    apiCall('getProducts', {}, function (data) {
         let products = data || [];
         let pOptions = products.map(p => {
-             let priceText = p.JobWorkPrice ? `(₹${p.JobWorkPrice})` : "";
-             return `<option value="${p.ID}">${p.Name} ${priceText}</option>`;
+            let priceText = p.JobWorkPrice ? `(₹${p.JobWorkPrice})` : "";
+            return `<option value="${p.ID}">${p.Name} ${priceText}</option>`;
         }).join('');
-        
+
         let html = `
             <form onsubmit="app_submitReceiveJob(event, '${jobId}')">
                 <div class="form-group">
@@ -831,7 +831,7 @@ Modal.openReceiveJob = function(jobId) {
     }, null, true);
 };
 
-window.app_submitReceiveJob = function(e, jobId) {
+window.app_submitReceiveJob = function (e, jobId) {
     e.preventDefault();
     let payload = {
         jobId: jobId,
@@ -839,14 +839,14 @@ window.app_submitReceiveJob = function(e, jobId) {
         readyQty: document.getElementById('rec-qty').value,
         missingQty: document.getElementById('rec-dmg').value
     };
-    apiCall('receiveJob', payload, function(res) {
+    apiCall('receiveJob', payload, function (res) {
         Toast.show(res.message, 'success');
         Modal.close();
         loadJobWork();
     });
 };
 
-Modal.openSettleJob = function(jobId, maxQtyToSettle, lockedPrice) {
+Modal.openSettleJob = function (jobId, maxQtyToSettle, lockedPrice) {
     let html = `
         <form onsubmit="app_submitSettleJob(event, '${jobId}', ${lockedPrice}, ${maxQtyToSettle})">
             <div class="surface-card" style="background:var(--bg-main); margin-bottom:16px;">
@@ -869,12 +869,12 @@ Modal.openSettleJob = function(jobId, maxQtyToSettle, lockedPrice) {
     Modal.open("Settle Job Payment", html);
 };
 
-window.app_submitSettleJob = function(e, jobId, price, maxQty) {
+window.app_submitSettleJob = function (e, jobId, price, maxQty) {
     e.preventDefault();
     let qty = document.getElementById('set-qty').value;
     if (qty > maxQty) { Toast.show("Cannot settle more than limit!", "error"); return; }
-    
-    apiCall('settlePayment', { jobId: jobId, settleQty: qty }, function(res) {
+
+    apiCall('settlePayment', { jobId: jobId, settleQty: qty }, function (res) {
         Toast.show(res.message, 'success');
         Modal.close();
         loadJobWork();
@@ -884,11 +884,11 @@ window.app_submitSettleJob = function(e, jobId, price, maxQty) {
 /* =========================================================================
    SETTINGS MODULE LOGIC
 ========================================================================= */
-window.init_settings = function() {
+window.init_settings = function () {
     // Determine the active inputs inside view-container
     const vc = document.getElementById('view-container');
     if (!vc) return;
-    
+
     const setGps = vc.querySelector('#set-gps-req');
     const setLat = vc.querySelector('#set-lat');
     const setLng = vc.querySelector('#set-lng');
@@ -915,7 +915,7 @@ window.init_settings = function() {
     }
 };
 
-window.app_saveSettings = function(e) {
+window.app_saveSettings = function (e) {
     e.preventDefault();
     const vc = document.getElementById('view-container');
     let payload = {
@@ -923,8 +923,8 @@ window.app_saveSettings = function(e) {
         OfficeLat: vc.querySelector('#set-lat').value,
         OfficeLng: vc.querySelector('#set-lng').value
     };
-    
-    apiCall('saveGlobalConfig', payload, function(res) {
+
+    apiCall('saveGlobalConfig', payload, function (res) {
         Toast.show("Settings properly uploaded to database.", "success");
         // Update local cache and force reflect on template as backup
         window.AppConfig = payload;
@@ -934,9 +934,9 @@ window.app_saveSettings = function(e) {
 function loadAttendanceUI(state, timeText) {
     const statusText = document.getElementById('att-status-text');
     if (state === 'active') {
-        if(statusText) statusText.innerHTML = `Checked In at <b>${timeText}</b>. Working...`;
+        if (statusText) statusText.innerHTML = `Checked In at <b>${timeText}</b>. Working...`;
     } else {
-        if(statusText) statusText.innerHTML = `Not Checked In`;
+        if (statusText) statusText.innerHTML = `Not Checked In`;
     }
 }
 
