@@ -211,7 +211,7 @@ function navigate(viewId) { ViewManager.loadView(viewId); }
    GENERIC API WRAPPER (Universal Fetch JSON)
 ========================================================================= */
 async function apiCall(action, payload, onSuccess, onError) {
-    if (APPS_SCRIPT_WEB_APP_URL === "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE") {
+    if (APPS_SCRIPT_WEB_APP_URL === "https://script.google.com/macros/s/AKfycbxjjfWCQbENMnqCL1FzDKa3Irp6pCHqiwcIMYIzs1E/dev") {
         Toast.show("Please configure your GAS Web App URL in app.js", "error");
         if (onError) onError();
         return;
