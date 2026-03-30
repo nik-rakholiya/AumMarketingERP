@@ -16,9 +16,13 @@
 
 <body data-theme="light">
 
-    <!-- Global App Loader -->
+    <!-- Global App Loader (Splash Screen) -->
     <div id="global-loader" class="loader-overlay hidden">
-        <div class="spinner"></div>
+        <div class="splash-content">
+            <i class="material-icons-outlined splash-icon">group_work</i>
+            <h1 class="splash-text">Aum ERP</h1>
+            <div class="progress-bar"><div class="progress-fill"></div></div>
+        </div>
     </div>
 
     <!-- App Container -->
@@ -443,6 +447,16 @@
             if (!currentUser) return;
             if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
                 document.getElementById('dash-admin').classList.remove('hidden');
+                
+                // Trigger Digit Animation Effect (Mocked values for now until Dashboard API is live)
+                setTimeout(() => {
+                    if (window.animateValue) {
+                        window.animateValue("stat-workers", 0, 24, 1500);
+                        window.animateValue("stat-products", 0, 185, 2000);
+                        window.animateValue("stat-low-stock", 0, 6, 1000);
+                        window.animateValue("stat-dispatch", 0, 42, 1800);
+                    }
+                }, 300);
             } else {
                 document.getElementById('dash-worker').classList.remove('hidden');
                 document.getElementById('worker-welcome').innerText = 'Welcome ' + currentUser.name + '!';

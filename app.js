@@ -210,14 +210,14 @@ function navigate(viewId) { ViewManager.loadView(viewId); }
 /* =========================================================================
    GENERIC API WRAPPER (Universal Fetch JSON)
 ========================================================================= */
-async function apiCall(action, payload, onSuccess, onError) {
+async function apiCall(action, payload, onSuccess, onError, silentLoad = false) {
     if (APPS_SCRIPT_WEB_APP_URL === "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE") {
         Toast.show("Please configure your GAS Web App URL in app.js", "error");
         if (onError) onError();
         return;
     }
 
-    Loader.show();
+    if (!silentLoad) Loader.show();
 
     try {
         const response = await fetch(APPS_SCRIPT_WEB_APP_URL, {
@@ -241,9 +241,44 @@ async function apiCall(action, payload, onSuccess, onError) {
         console.error("API Error:", error);
         if (onError) onError(error);
     } finally {
-        Loader.hide();
+        if (!silentLoad) Loader.hide();
     }
 }
+
+/* =========================================================================
+   UI HELPERS & ANIMATIONS
+========================================================================= */
+function animateValue(id, start, end, duration) {
+    const obj = document.getElementById(id);
+    if (!obj) return;
+    let startTimestamp = null;
+    const step = (timestamp) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        obj.innerHTML = Math.floor(progress * (end - start) + start);
+        if (progress < 1) {
+            window.requestAnimationFrame(step);
+        } else {
+            obj.innerHTML = end;
+        }
+    };
+    window.requestAnimationFrame(step);
+}
+
+const SkeletonBuilder = {
+    generateTr: function(cols) {
+        let tds = '';
+        for(let i=0; i<cols; i++) {
+            tds += `<td><div class="skeleton-box" style="width: ${Math.floor(Math.random() * 40 + 60)}%;"></div></td>`;
+        }
+        return `<tr class="skeleton-row">${tds}</tr>`;
+    },
+    generateTable: function(rows, cols) {
+        let html = '';
+        for(let i=0; i<rows; i++) html += this.generateTr(cols);
+        return html;
+    }
+};
 
 /* =========================================================================
    MODAL MANAGER
@@ -345,10 +380,13 @@ window.Modal = {
    WORKERS MODULE LOGIC
 ========================================================================= */
 window.loadWorkers = function () {
-    apiCall('getWorkers', {}, function (data) {
-        const tbody = document.getElementById('workers-tbody');
-        if (!tbody) return;
+    const tbody = document.getElementById('workers-tbody');
+    if (!tbody) return;
+    
+    // Inject smooth skeleton loading instead of blocking everything
+    tbody.innerHTML = SkeletonBuilder.generateTable(4, 5);
 
+    apiCall('getWorkers', {}, function (data) {
         if (!data || data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No workers found.</td></tr>';
             return;
@@ -358,7 +396,7 @@ window.loadWorkers = function () {
         data.forEach(w => {
             let statusBadge = w.Status === 'Active' ? 'active' : (w.Status === 'Pending' ? 'pending' : 'neutral');
             html += `
-            <tr>
+            <tr style="animation: fadeIn 0.4s ease-out;">
                 <td style="font-weight:600;">${w.Name}</td>
                 <td>${w.Phone}</td>
                 <td>${w.Role || 'Worker'}</td>
@@ -371,7 +409,7 @@ window.loadWorkers = function () {
             </tr>`;
         });
         tbody.innerHTML = html;
-    });
+    }, null, true); // <--- Note: true enables silentLoad (no global splash)
 };
 
 window.app_saveWorker = function (e, workerId) {
@@ -390,35 +428,39 @@ window.app_saveWorker = function (e, workerId) {
    MASTER DATA (PRODUCTS & MATERIALS) LOGIC
 ========================================================================= */
 window.loadMasterData = function () {
+    const tbodyProd = document.getElementById('products-tbody');
+    const tbodyMat = document.getElementById('materials-tbody');
+    
+    if(tbodyProd) tbodyProd.innerHTML = SkeletonBuilder.generateTable(3, 4);
+    if(tbodyMat) tbodyMat.innerHTML = SkeletonBuilder.generateTable(3, 3);
+
     // Load Products
     apiCall('getProducts', {}, function (data) {
-        const tbody = document.getElementById('products-tbody');
-        if (!tbody) return;
+        if (!tbodyProd) return;
         if (!data || data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No products found.</td></tr>';
+            tbodyProd.innerHTML = '<tr><td colspan="4" style="text-align:center;">No products found.</td></tr>';
         } else {
             let html = '';
             data.forEach(p => {
-                html += `<tr><td><b>${p.Name}</b></td><td>${p.Brand}</td><td>${p.Category}</td><td>${p.Unit}</td></tr>`;
+                html += `<tr style="animation: fadeIn 0.4s ease-out;"><td><b>${p.Name}</b></td><td>${p.Brand}</td><td>${p.Category}</td><td>${p.Unit}</td></tr>`;
             });
-            tbody.innerHTML = html;
+            tbodyProd.innerHTML = html;
         }
-    });
-
+    }, null, true);
+    
     // Load Materials
     apiCall('getRawMaterials', {}, function (data) {
-        const tbody = document.getElementById('materials-tbody');
-        if (!tbody) return;
+        if (!tbodyMat) return;
         if (!data || data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No materials found.</td></tr>';
+            tbodyMat.innerHTML = '<tr><td colspan="3" style="text-align:center;">No materials found.</td></tr>';
         } else {
             let html = '';
             data.forEach(m => {
-                html += `<tr><td><b>${m.Name}</b></td><td>${m.MinStock}</td><td>${m.Unit}</td></tr>`;
+                html += `<tr style="animation: fadeIn 0.4s ease-out;"><td><b>${m.Name}</b></td><td>${m.MinStock}</td><td>${m.Unit}</td></tr>`;
             });
-            tbody.innerHTML = html;
+            tbodyMat.innerHTML = html;
         }
-    });
+    }, null, true);
 };
 
 window.app_saveProduct = function (e) {
