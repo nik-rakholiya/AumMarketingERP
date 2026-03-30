@@ -811,6 +811,38 @@ window.app_submitSettleJob = function(e, jobId, price, maxQty) {
     });
 };
 
+/* =========================================================================
+   SETTINGS MODULE LOGIC
+========================================================================= */
+window.init_settings = function() {
+    // Populate existing configs
+    if (window.AppConfig) {
+        let isReq = window.AppConfig['GeoLocationRequired'] === 'true' || window.AppConfig['GeoLocationRequired'] === true;
+        document.getElementById('set-gps-req').checked = isReq;
+        
+        let lat = window.AppConfig['OfficeLat'];
+        if (lat) document.getElementById('set-lat').value = lat;
+
+        let lng = window.AppConfig['OfficeLng'];
+        if (lng) document.getElementById('set-lng').value = lng;
+    }
+};
+
+window.app_saveSettings = function(e) {
+    e.preventDefault();
+    let payload = {
+        GeoLocationRequired: document.getElementById('set-gps-req').checked ? "true" : "false",
+        OfficeLat: document.getElementById('set-lat').value,
+        OfficeLng: document.getElementById('set-lng').value
+    };
+    
+    apiCall('saveGlobalConfig', payload, function(res) {
+        Toast.show("Settings properly uploaded to database.", "success");
+        // Update local cache
+        window.AppConfig = payload;
+    });
+};
+
 function loadAttendanceUI(state, timeText) {
     const statusText = document.getElementById('att-status-text');
     if (state === 'active') {

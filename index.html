@@ -62,6 +62,9 @@
                     <a href="#" class="nav-item" data-view="reports" onclick="navigate('reports')">
                         <i class="material-icons-outlined">summarize</i> Reports
                     </a>
+                    <a href="#" class="nav-item" data-view="settings" onclick="navigate('settings')">
+                        <i class="material-icons-outlined">settings</i> Settings
+                    </a>
                 </div>
             </nav>
 
@@ -471,6 +474,39 @@
                     </table>
                 </div>
             </div>
+        <!-- SETTINGS VIEW (ADMIN ONLY) -->
+        <div id="template_settings">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
+                <h2 style="font-size: 24px; font-weight:600;">System Settings</h2>
+            </div>
+            
+            <div class="surface-card">
+                <h3 style="margin-bottom: 16px;">Geo-Location / Attendance Configuration</h3>
+                <form onsubmit="app_saveSettings(event)" id="settings-form">
+                    <div class="form-group" style="display:flex; gap:12px; align-items: center;">
+                        <input type="checkbox" id="set-gps-req" style="width:20px; height:20px;">
+                        <label class="form-label" style="margin:0;">Require Geo-Location on Check-In & Out</label>
+                    </div>
+                    <div class="form-group" style="display:flex; gap:12px;">
+                        <div style="flex:1;">
+                            <label class="form-label">Office Latitude (e.g. 22.3039)</label>
+                            <input type="text" id="set-lat" class="form-input" placeholder="Latitude">
+                        </div>
+                        <div style="flex:1;">
+                            <label class="form-label">Office Longitude (e.g. 70.8022)</label>
+                            <input type="text" id="set-lng" class="form-input" placeholder="Longitude">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Geo-Fence Radius (Meters) - Under construction</label>
+                        <input type="number" id="set-radius" class="form-input" placeholder="e.g. 100">
+                        <small style="color:var(--text-secondary);">Currently only captures Lat/Long. Fence blocking feature pending.</small>
+                    </div>
+                    <div style="margin-top: 24px;">
+                        <button type="submit" class="btn-primary" style="width:auto; padding: 10px 24px;"><i class="material-icons-outlined" style="vertical-align:middle; font-size:18px;">save</i> Save Config</button>
+                    </div>
+                </form>
+            </div>
         </div>
 
     </div>
@@ -515,6 +551,10 @@
                 document.querySelectorAll('#template_jobwork .admin-col').forEach(el => el.style.display = 'block');
             }
             if (window.loadJobWork) window.loadJobWork();
+        };
+
+        window.init_settings = function() {
+            if (window.init_settings) window.init_settings();
         };
 
         window.handleCheckIn = function () { if (window.handleAttendanceAction) window.handleAttendanceAction('in'); };
