@@ -612,21 +612,30 @@ window.handleAttendanceAction = function (actionType) {
         Loader.show();
     }
 
-    if (requireGps && (actionType === 'in' || actionType === 'out')) {
+    if (actionType === 'in' || actionType === 'out') {
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 function (position) {
                     processAttendanceAPI(actionType, position.coords.latitude, position.coords.longitude);
                 },
                 function (error) {
-                    Loader.hide();
-                    Toast.show("Location access required for Check-In/Out.", "error");
+                    if (requireGps) {
+                        Loader.hide();
+                        Toast.show("Location access required for Check-In/Out.", "error");
+                    } else {
+                        // User denied or error, but not required, so proceed without GPS
+                        processAttendanceAPI(actionType, "", "");
+                    }
                 },
                 { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
             );
         } else {
-            Loader.hide();
-            Toast.show("Geolocation is not supported by this browser.", "error");
+            if (requireGps) {
+                Loader.hide();
+                Toast.show("Geolocation is not supported by this browser.", "error");
+            } else {
+                processAttendanceAPI(actionType, "", "");
+            }
         }
     } else {
         processAttendanceAPI(actionType, "", ""); // Internal transitions or non-GPS required
