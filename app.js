@@ -535,103 +535,290 @@ window.app_saveMaterial = function (e) {
 };
 
 /* =========================================================================
-   ATTENDANCE MODULE LOGIC
+   ATTENDANCE MODULE LOGIC 
+   (Smart Auto-Pause, GPS Tracking, Role-Hiding)
 ========================================================================= */
 let clockInterval = null;
+let geoWatchId = null;
+
+// Mathematical formula to calculate distance between two lat/long points (in meters)
+function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return 999999;
+    var R = 6371e3; // Radius of the earth in m
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
 
 window.init_attendance = function () {
     if (!currentUser) return;
-    if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
-        // Admin view modifications if any
+    
+    // Hide UI blocks from Workers unconditionally
+    if (currentUser.role === 'Worker') {
+        const adminWidgets = document.getElementById('admin-attendance-widgets');
+        if (adminWidgets) adminWidgets.style.display = 'none';
+        
+        // Also hide Worker Column in table
+        document.querySelectorAll('.admin-col').forEach(el => el.style.display = 'none');
+    } else {
+        document.querySelectorAll('.admin-col').forEach(el => el.style.display = 'table-cell');
     }
 
-    // Start Clock
+    // Refresh display
+    let currentState = localStorage.getItem('att_shiftState') || 'not_started';
+    updateAttendanceButtons(currentState);
+    
+    // Start Clock Tick
     if (clockInterval) clearInterval(clockInterval);
-
     const updateClock = () => {
         const timeEl = document.getElementById('clock-time');
         const dateEl = document.getElementById('clock-date');
         if (!timeEl || !dateEl) return;
-
+        
         const now = new Date();
         timeEl.innerText = now.toLocaleTimeString('en-US', { hour12: false });
         dateEl.innerText = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        
+        // Update Table row details if tracking
+        if (currentState !== 'not_started') {
+            refreshActiveTableRow();
+        }
     };
-
+    
     updateClock();
     clockInterval = setInterval(updateClock, 1000);
 
-    // Initial state setup based on local storage
-    if (localStorage.getItem('activeAttendanceRecordId')) {
-        loadAttendanceUI('active', 'Resumed');
-    } else {
-        loadAttendanceUI('inactive', null);
+    // If active or paused, resume tracking location silently
+    if (currentState === 'active' || currentState === 'paused') {
+        startSilentGeoTracking();
     }
+    
+    // Initial UI render
+    loadAttendanceUI(currentState);
 };
 
+// Unified button handler from UI click
 window.handleAttendanceAction = function (actionType) {
     if (!currentUser) return;
-
-    // Check if GPS is required
     let requireGps = (window.AppConfig && window.AppConfig['GeoLocationRequired'] === 'true');
+    
+    // Format UI early for user feedback (Check in/out needs loaders)
+    if (actionType === 'in' || actionType === 'out') {
+        Loader.show();
+    }
 
-    if (requireGps) {
+    if (requireGps && (actionType === 'in' || actionType === 'out')) {
         if (navigator.geolocation) {
-            Loader.show();
             navigator.geolocation.getCurrentPosition(
                 function (position) {
-                    executeAttendanceAPI(actionType, position.coords.latitude, position.coords.longitude);
+                    processAttendanceAPI(actionType, position.coords.latitude, position.coords.longitude);
                 },
                 function (error) {
                     Loader.hide();
-                    Toast.show("Location access required for Attendance.", "error");
+                    Toast.show("Location access required for Check-In/Out.", "error");
                 },
-                { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
             );
         } else {
+            Loader.hide();
             Toast.show("Geolocation is not supported by this browser.", "error");
         }
     } else {
-        executeAttendanceAPI(actionType, "", "");
+        processAttendanceAPI(actionType, "", ""); // Internal transitions or non-GPS required
     }
 };
 
-function executeAttendanceAPI(actionType, lat, lng) {
-    let payload = { workerId: currentUser.id, lat: lat, lng: lng };
+function processAttendanceAPI(actionType, lat, lng) {
+    // Process Local State purely
+    if (actionType === 'pause') {
+        localStorage.setItem('att_shiftState', 'paused');
+        localStorage.setItem('att_lastPauseTimestamp', new Date().getTime());
+        localStorage.setItem('att_outOfRangeCount', parseInt(localStorage.getItem('att_outOfRangeCount') || 0) + 1);
+        updateAttendanceButtons('paused');
+        loadAttendanceUI('paused');
+        Toast.show("Shift Paused.", "warning");
+        return;
+    }
+    
+    if (actionType === 'resume') {
+        let pauseStamp = localStorage.getItem('att_lastPauseTimestamp');
+        if (pauseStamp) {
+            let pausedMs = new Date().getTime() - parseInt(pauseStamp);
+            let totalPaused = parseInt(localStorage.getItem('att_totalPausedTime') || 0);
+            localStorage.setItem('att_totalPausedTime', totalPaused + Math.floor(pausedMs/1000));
+        }
+        localStorage.setItem('att_shiftState', 'active');
+        localStorage.removeItem('att_lastPauseTimestamp');
+        updateAttendanceButtons('active');
+        loadAttendanceUI('active');
+        Toast.show("Shift Resumed.", "info");
+        return;
+    }
 
-    // We store the RecordID locally for checkout mapping
+    // Call Backend for Check-In / Check-Out
+    let payload = { workerId: currentUser.id, lat: lat, lng: lng };
+    
     if (actionType === 'in') {
         apiCall('checkIn', payload, function (res) {
-            Toast.show(res.message, 'success');
-            localStorage.setItem('activeAttendanceRecordId', res.recordId);
-            loadAttendanceUI('active', res.time);
+            Toast.show("Checked In Successfully", 'success');
+            localStorage.setItem('att_shiftState', 'active');
+            localStorage.setItem('att_recordId', res.recordId);
+            localStorage.setItem('att_checkInTime', new Date().getTime());
+            localStorage.setItem('att_totalPausedTime', 0);
+            localStorage.setItem('att_outOfRangeCount', 0);
+            updateAttendanceButtons('active');
+            loadAttendanceUI('active');
+            startSilentGeoTracking();
         });
-    } else {
-        payload.recordId = localStorage.getItem('activeAttendanceRecordId');
+    } else if (actionType === 'out') {
+        payload.recordId = localStorage.getItem('att_recordId');
         if (!payload.recordId) {
+            Loader.hide();
             Toast.show("No active check-in found.", "error");
             return;
         }
+        
+        // Finalize pause calculations if checking out while paused
+        if (localStorage.getItem('att_shiftState') === 'paused') {
+            let pauseStamp = localStorage.getItem('att_lastPauseTimestamp');
+            if (pauseStamp) {
+                let pausedMs = new Date().getTime() - parseInt(pauseStamp);
+                let totalPaused = parseInt(localStorage.getItem('att_totalPausedTime') || 0);
+                localStorage.setItem('att_totalPausedTime', totalPaused + Math.floor(pausedMs/1000));
+            }
+        }
+        
+        // Let's pass the calculated duration just in case
+        payload.calculatedDuration = calculateCurrentDurationString();
+        payload.outOfRangeCount = localStorage.getItem('att_outOfRangeCount') || 0;
+
         apiCall('checkOut', payload, function (res) {
-            Toast.show(res.message, 'success');
-            localStorage.removeItem('activeAttendanceRecordId');
-            loadAttendanceUI('inactive', null);
+            Toast.show("Checked Out Successfully", 'success');
+            localStorage.setItem('att_shiftState', 'not_started');
+            localStorage.removeItem('att_recordId');
+            if(geoWatchId) navigator.geolocation.clearWatch(geoWatchId);
+            updateAttendanceButtons('not_started');
+            loadAttendanceUI('not_started');
         });
     }
 }
 
-function loadAttendanceUI(state, time) {
+// Silently watch location and trigger auto-pause without Distracting Loader
+function startSilentGeoTracking() {
+    if (geoWatchId) navigator.geolocation.clearWatch(geoWatchId);
+    let requireGps = (window.AppConfig && window.AppConfig['GeoLocationRequired'] === 'true');
+    if (!requireGps || !navigator.geolocation) return;
+    
+    let officeLat = parseFloat(window.AppConfig.OfficeLat);
+    let officeLng = parseFloat(window.AppConfig.OfficeLng);
+    let allowedRadius = parseInt(window.AppConfig.GeoFenceRadius || 200); // meters
+    
+    if (isNaN(officeLat) || isNaN(officeLng)) return;
+
+    geoWatchId = navigator.geolocation.watchPosition(
+        function (pos) {
+            let dist = getDistanceFromLatLonInM(pos.coords.latitude, pos.coords.longitude, officeLat, officeLng);
+            let currentState = localStorage.getItem('att_shiftState');
+            
+            if (dist > allowedRadius && currentState === 'active') {
+                processAttendanceAPI('pause', pos.coords.latitude, pos.coords.longitude);
+                Toast.show(`Auto-Paused: You are ${Math.round(dist)}m away from office.`, 'warning');
+            } else if (dist <= allowedRadius && currentState === 'paused') {
+                 // Auto-Resume
+                 processAttendanceAPI('resume', pos.coords.latitude, pos.coords.longitude);
+                 Toast.show(`Auto-Resumed: Back in range.`, 'success');
+            }
+        },
+        function(err) { console.warn("Watch position err", err); },
+        { enableHighAccuracy: false, maximumAge: 10000, timeout: 5000 }
+    );
+}
+
+function updateAttendanceButtons(state) {
+    const btnIn = document.getElementById('btn-checkin');
+    const btnOut = document.getElementById('btn-checkout');
+    const btnPause = document.getElementById('btn-pause');
+    const btnResume = document.getElementById('btn-resume');
+    
+    if(!btnIn) return;
+
+    btnIn.style.display = 'none';
+    btnOut.style.display = 'none';
+    btnPause.style.display = 'none';
+    btnResume.style.display = 'none';
+
+    if (state === 'not_started') {
+        btnIn.style.display = 'block';
+    } else if (state === 'active') {
+        btnPause.style.display = 'block';
+        btnOut.style.display = 'block';
+    } else if (state === 'paused') {
+        btnResume.style.display = 'block';
+        btnOut.style.display = 'block';
+    }
+}
+
+function calculateCurrentDurationString() {
+    let startMs = parseInt(localStorage.getItem('att_checkInTime'));
+    if (!startMs) return "00:00:00";
+    
+    let now = new Date().getTime();
+    let totalElapsedMs = now - startMs;
+    
+    let totalPausedSec = parseInt(localStorage.getItem('att_totalPausedTime') || 0);
+    let currentState = localStorage.getItem('att_shiftState');
+    
+    // Add current pause session to total if currently paused
+    if (currentState === 'paused') {
+        let pauseStamp = parseInt(localStorage.getItem('att_lastPauseTimestamp') || now);
+        totalPausedSec += Math.floor((now - pauseStamp)/1000);
+    }
+    
+    let activeSec = Math.floor(totalElapsedMs / 1000) - totalPausedSec;
+    if (activeSec < 0) activeSec = 0;
+    
+    let h = Math.floor(activeSec / 3600).toString().padStart(2, '0');
+    let m = Math.floor((activeSec % 3600) / 60).toString().padStart(2, '0');
+    let s = (activeSec % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+}
+
+function refreshActiveTableRow() {
+    const durEl = document.getElementById('dyn-duration');
+    const countEl = document.getElementById('dyn-oor');
+    const badgeEl = document.getElementById('dyn-badge');
+    const state = localStorage.getItem('att_shiftState');
+    
+    if (durEl) durEl.innerText = calculateCurrentDurationString();
+    if (countEl) countEl.innerText = localStorage.getItem('att_outOfRangeCount') || "0";
+    if (badgeEl) {
+        if (state === 'active') {
+            badgeEl.className = 'badge active';
+            badgeEl.innerHTML = `<i class="material-icons-outlined" style="font-size:14px;">check</i> In Range`;
+        } else {
+            badgeEl.className = 'badge pending';
+            badgeEl.innerHTML = `<i class="material-icons-outlined" style="font-size:14px;">pause</i> Paused / Out`;
+        }
+    }
+}
+
+function loadAttendanceUI(state) {
     const statusEl = document.getElementById('shift-status');
     const tbody = document.getElementById('attendance-tbody');
-
+    
     if (state === 'active') {
-        if (statusEl) statusEl.innerText = "Checked In — Active";
+        if (statusEl) { statusEl.innerText = "Checked In — Active"; statusEl.style.color = "var(--status-success)"; }
+    } else if (state === 'paused') {
+        if (statusEl) { statusEl.innerText = "Shift Paused"; statusEl.style.color = "var(--status-warning)"; }
     } else {
-        if (statusEl) statusEl.innerText = "Ready for Shift";
+        if (statusEl) { statusEl.innerText = "Ready for Shift"; statusEl.style.color = "var(--text-secondary)"; }
     }
 
-    if (tbody && time) {
-        // Appending a dummy log simulation matching glass theme UI
+    if (tbody && state !== 'not_started') {
+        // Appending a dummy log simulation matching glass theme UI, but assigning IDs for real-time tick
+        let startObj = new Date(parseInt(localStorage.getItem('att_checkInTime') || new Date().getTime()));
         tbody.innerHTML = `
         <tr style="border-bottom: 1px solid var(--border-color);">
             <td style="padding: 16px;">1</td>
@@ -641,21 +828,18 @@ function loadAttendanceUI(state, time) {
                     <span style="font-weight:600;">${currentUser.name}</span>
                 </div>
             </td>
-            <td style="padding: 16px;">${new Date().toLocaleTimeString('en-US', { hour12: false })}</td>
+            <td style="padding: 16px;">${startObj.toLocaleTimeString('en-US', {hour12:false})}</td>
             <td style="padding: 16px; color:var(--text-secondary);">—</td>
-            <td style="padding: 16px;">Tracking...</td>
+            <td style="padding: 16px; font-family:monospace; font-size:16px;" id="dyn-duration">00:00:00</td>
             <td style="padding: 16px;">
-                 <span style="color:var(--status-success); font-weight:600; font-size:12px; display:flex; align-items:center; gap:4px;"><i class="material-icons-outlined" style="font-size:14px;">location_on</i> In Range</span>
+                 <span style="color:var(--status-error); font-weight:600; font-size:12px; display:flex; align-items:center; gap:4px;"><i class="material-icons-outlined" style="font-size:14px;">warning</i> <span id="dyn-oor">0</span> times out</span>
             </td>
             <td style="padding: 16px;">
-                <div class="badge active"><i class="material-icons-outlined" style="font-size:14px;">check</i> Present</div>
+                <div class="badge active" id="dyn-badge"><i class="material-icons-outlined" style="font-size:14px;">check</i> In Range</div>
             </td>
         </tr>`;
-    } else if (tbody && !time) {
-        // Keep logs if they exist or simulate empty
-        if (tbody.innerHTML.includes("Log data will populate here")) {
-            tbody.innerHTML = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Your daily shift has ended.</td></tr>`;
-        }
+    } else if (tbody && state === 'not_started') {
+        tbody.innerHTML = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Your daily shift has ended.</td></tr>`;
     }
 }
 
