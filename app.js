@@ -110,6 +110,11 @@ const AuthManager = {
         document.getElementById('user-role').innerText = currentUser.role;
         document.getElementById('user-avatar').innerText = currentUser.name.charAt(0).toUpperCase();
 
+        // Fetch Global Configs on login
+        apiCall('getGlobalConfig', {}, function (configs) {
+            window.AppConfig = configs;
+        }, null, true);
+
         // Show/Hide Admin Modules
         if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
             document.getElementById('admin-menu').classList.remove('hidden');
@@ -294,24 +299,40 @@ window.Modal = {
     },
 
     // Specific Modal Triggers
-    openAddProduct: function () {
+    openAddProduct: function (parentListHTML) {
         const html = `
             <form onsubmit="app_saveProduct(event)">
                 <div class="form-group">
                     <label class="form-label">Product Name</label>
                     <input type="text" id="p-name" class="form-input" required>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Brand</label>
-                    <input type="text" id="p-brand" class="form-input">
+                <div class="form-group" style="display:flex; gap:12px;">
+                    <div style="flex:1;">
+                        <label class="form-label">Category</label>
+                        <select id="p-cat" class="form-input">
+                            <option>General</option>
+                            <option>Flash Cards</option>
+                            <option>Books</option>
+                            <option>Games</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label class="form-label">Parent Product (Optional)</label>
+                        <select id="p-parent" class="form-input">
+                            <option value="">None (Standalone)</option>
+                            ${parentListHTML || ''}
+                        </select>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Category</label>
-                    <select id="p-cat" class="form-input">
-                        <option>General</option>
-                        <option>Apparel</option>
-                        <option>Electronics</option>
-                    </select>
+                <div class="form-group" style="display:flex; gap:12px;">
+                    <div style="flex:1;">
+                        <label class="form-label">Brand</label>
+                        <input type="text" id="p-brand" class="form-input">
+                    </div>
+                    <div style="flex:1;">
+                        <label class="form-label">Job Work Price (₹)</label>
+                        <input type="number" step="0.01" id="p-price" class="form-input" placeholder="Per Unit Output" required>
+                    </div>
                 </div>
                 <div class="modal-footer" style="padding: 16px 0 0 0; border: none;">
                     <button type="button" class="btn-secondary" onclick="Modal.close()">Cancel</button>
@@ -437,12 +458,23 @@ window.loadMasterData = function () {
     // Load Products
     apiCall('getProducts', {}, function (data) {
         if (!tbodyProd) return;
+        window.cachedProducts = data || []; // Cache for parent dropdowns
+        
         if (!data || data.length === 0) {
-            tbodyProd.innerHTML = '<tr><td colspan="4" style="text-align:center;">No products found.</td></tr>';
+            tbodyProd.innerHTML = '<tr><td colspan="5" style="text-align:center;">No products found.</td></tr>';
         } else {
             let html = '';
             data.forEach(p => {
-                html += `<tr style="animation: fadeIn 0.4s ease-out;"><td><b>${p.Name}</b></td><td>${p.Brand}</td><td>${p.Category}</td><td>${p.Unit}</td></tr>`;
+                let badge = p.ParentProductID ? `<span class="badge neutral" style="font-size:10px; margin-left:8px;">Sub</span>` : '';
+                html += `<tr style="animation: fadeIn 0.4s ease-out;">
+                            <td><b>${p.Name}</b> ${badge}</td>
+                            <td>${p.Category}</td>
+                            <td>₹${p.JobWorkPrice || '0.00'}</td>
+                            <td>${p.Brand}</td>
+                            <td>
+                                <button class="icon-btn"><i class="material-icons-outlined" style="font-size:18px;">edit</i></button>
+                            </td>
+                        </tr>`;
             });
             tbodyProd.innerHTML = html;
         }
@@ -469,6 +501,8 @@ window.app_saveProduct = function (e) {
         name: document.getElementById('p-name').value,
         brand: document.getElementById('p-brand').value,
         category: document.getElementById('p-cat').value,
+        price: parseFloat(document.getElementById('p-price').value),
+        parentID: document.getElementById('p-parent').value,
         unit: 'Pcs'
     };
     apiCall('addProduct', payload, function (res) {
@@ -476,6 +510,14 @@ window.app_saveProduct = function (e) {
         Modal.close();
         loadMasterData();
     });
+};
+
+// Expose advanced Modal Triggers mapped in index.html
+window.triggerAddProduct = function() {
+    let parentOpts = (window.cachedProducts || [])
+        .filter(p => !p.ParentProductID) // Only mains
+        .map(p => `<option value="${p.ID}">${p.Name}</option>`).join('');
+    Modal.openAddProduct(parentOpts);
 };
 
 window.app_saveMaterial = function (e) {
@@ -491,3 +533,290 @@ window.app_saveMaterial = function (e) {
         loadMasterData();
     });
 };
+
+/* =========================================================================
+   ATTENDANCE MODULE LOGIC
+========================================================================= */
+window.handleAttendanceAction = function (actionType) {
+    if (!currentUser) return;
+    
+    // Check if GPS is required
+    let requireGps = (window.AppConfig && window.AppConfig['GeoLocationRequired'] === 'true');
+    
+    if (requireGps) {
+        if (navigator.geolocation) {
+            Loader.show();
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    executeAttendanceAPI(actionType, position.coords.latitude, position.coords.longitude);
+                },
+                function(error) {
+                    Loader.hide();
+                    Toast.show("Location access required for Attendance.", "error");
+                },
+                { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
+            );
+        } else {
+            Toast.show("Geolocation is not supported by this browser.", "error");
+        }
+    } else {
+        executeAttendanceAPI(actionType, "", "");
+    }
+};
+
+function executeAttendanceAPI(actionType, lat, lng) {
+    let payload = { workerId: currentUser.id, lat: lat, lng: lng };
+    
+    // We store the RecordID locally for checkout mapping
+    if (actionType === 'in') {
+        apiCall('checkIn', payload, function(res) {
+            Toast.show(res.message, 'success');
+            localStorage.setItem('activeAttendanceRecordId', res.recordId);
+            // Optionally update UI buttons
+            loadAttendanceUI('active', res.time);
+        });
+    } else {
+        payload.recordId = localStorage.getItem('activeAttendanceRecordId');
+        if (!payload.recordId) {
+            Toast.show("No active check-in found.", "error");
+            return;
+        }
+        apiCall('checkOut', payload, function(res) {
+            Toast.show(res.message, 'success');
+            localStorage.removeItem('activeAttendanceRecordId');
+            loadAttendanceUI('inactive', null);
+        });
+    }
+}
+
+/* =========================================================================
+   JOB WORK MODULE LOGIC
+========================================================================= */
+let currentJobTab = 'active'; // 'active' or 'settled'
+
+window.loadJobWork = function () {
+    const tbody = document.getElementById('jobwork-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = SkeletonBuilder.generateTable(4, 5);
+
+    // Tab UI Update
+    document.getElementById('tab-active-jobs').style.borderBottom = currentJobTab === 'active' ? '2px solid var(--accent-primary)' : 'none';
+    document.getElementById('tab-active-jobs').style.color = currentJobTab === 'active' ? 'var(--accent-primary)' : 'var(--text-secondary)';
+    
+    document.getElementById('tab-settled-jobs').style.borderBottom = currentJobTab === 'settled' ? '2px solid var(--accent-primary)' : 'none';
+    document.getElementById('tab-settled-jobs').style.color = currentJobTab === 'settled' ? 'var(--accent-primary)' : 'var(--text-secondary)';
+
+    let payload = {};
+    if (currentUser.role === 'Worker') payload.workerId = currentUser.id;
+
+    apiCall('getJobs', payload, function (data) {
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No jobs found.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        data.forEach(job => {
+            // Filter logic
+            let isActive = job.Status === 'Pending' || job.Status === 'Received' || job.Status === 'Partially Settled';
+            if (currentJobTab === 'active' && !isActive) return;
+            if (currentJobTab === 'settled' && isActive) return;
+
+            let statusBadge = 'neutral';
+            if (job.Status === 'Received') statusBadge = 'active';
+            if (job.Status === 'Pending') statusBadge = 'warning';
+            
+            // Reconstruct Worker and Material Name (Ideally from backend ID join, but we will show IDs for demo if we don't have lookup maps. Wait, we lack a quick lookup map on frontend. Let's just create a generic view.)
+            let workerName = (currentUser.role === 'Worker') ? "You" : `Worker ID: ${job.JobWorkerID.substring(0,4)}`;
+            let materialName = `Material ID: ${job.RawMaterialID.substring(0,4)}`;
+
+            // Actions mapping
+            let actionsHTML = '';
+            if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
+                if (job.Status === 'Pending') {
+                    actionsHTML = `<button class="btn-secondary" style="padding:4px 8px; font-size:12px;" onclick="Modal.openReceiveJob('${job.ID}')">Receive</button>`;
+                } else if (job.Status === 'Received' || job.Status === 'Partially Settled') {
+                    let totalVal = parseFloat(job.JobWorkPrice || 0) * (job.ReadyQty || 0);
+                    let remQty = parseInt(job.ReadyQty || 0) - parseInt(job.SettledQty || 0);
+                    actionsHTML = `<button class="btn-primary" style="padding:4px 8px; font-size:12px; width:auto;" onclick="Modal.openSettleJob('${job.ID}', ${remQty}, ${job.JobWorkPrice})">Settle (${remQty} left)</button>`;
+                } else {
+                    actionsHTML = `<span style="font-size:12px; color:var(--status-success);">Fully Settled</span>`;
+                }
+            } else {
+                 actionsHTML = `<span style="font-size:12px; color:var(--text-secondary);">View Only</span>`;
+            }
+
+            html += `<tr style="animation: fadeIn 0.4s ease-out;">
+                        <td>${job.SentDate}</td>
+                        <td><b>${workerName}</b></td>
+                        <td>${job.RawQty} units of ${materialName}</td>
+                        <td><span class="badge ${statusBadge}">${job.Status}</span></td>
+                        <td>${actionsHTML}</td>
+                    </tr>`;
+        });
+        
+        tbody.innerHTML = html || '<tr><td colspan="5" style="text-align:center;">No jobs match this filter.</td></tr>';
+        
+    }, null, true);
+};
+
+// Expose tab listeners
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        const tabActive = document.getElementById('tab-active-jobs');
+        const tabSettled = document.getElementById('tab-settled-jobs');
+        if (tabActive) tabActive.addEventListener('click', () => { currentJobTab = 'active'; loadJobWork(); });
+        if (tabSettled) tabSettled.addEventListener('click', () => { currentJobTab = 'settled'; loadJobWork(); });
+    }, 500);
+});
+
+// Modals Setup
+window.triggerIssueJob = function() {
+    // We need list of Workers and Materials.
+    Modal.open("Issue Job", "<div style='text-align:center; padding: 20px;'><div class='spinner' style='width:30px;height:30px;margin: 0 auto 10px;'></div><p>Fetching resources...</p></div>");
+    
+    Promise.all([
+        fetch(APPS_SCRIPT_WEB_APP_URL, { method: 'POST', body: JSON.stringify({ action: 'getWorkers', data: {} }), headers: {'Content-Type': 'text/plain;charset=utf-8'} }).then(res => res.json()),
+        fetch(APPS_SCRIPT_WEB_APP_URL, { method: 'POST', body: JSON.stringify({ action: 'getRawMaterials', data: {} }), headers: {'Content-Type': 'text/plain;charset=utf-8'} }).then(res => res.json())
+    ]).then(responses => {
+        let workers = responses[0].data || [];
+        let materials = responses[1].data || [];
+        
+        let wOptions = workers.filter(w=>w.Status === 'Active').map(w => `<option value="${w.ID}">${w.Name}</option>`).join('');
+        let mOptions = materials.map(m => `<option value="${m.ID}">${m.Name} (${m.Unit})</option>`).join('');
+        
+        let html = `
+            <form onsubmit="app_submitIssueJob(event)">
+                <div class="form-group">
+                    <label class="form-label">Select Worker</label>
+                    <select id="iss-worker" class="form-input" required>${wOptions}</select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Raw Material to Send</label>
+                    <select id="iss-material" class="form-input" required>${mOptions}</select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Quantity Sent</label>
+                    <input type="number" id="iss-qty" class="form-input" required placeholder="e.g. 1000">
+                </div>
+                <div class="modal-footer" style="padding: 16px 0 0 0; border: none;">
+                    <button type="button" class="btn-secondary" onclick="Modal.close()">Cancel</button>
+                    <button type="submit" class="btn-primary" style="width:auto;">Assign Job</button>
+                </div>
+            </form>
+        `;
+        Modal.open("Issue Job to Worker", html);
+    });
+};
+
+window.app_submitIssueJob = function(e) {
+    e.preventDefault();
+    let payload = {
+        workerId: document.getElementById('iss-worker').value,
+        materialId: document.getElementById('iss-material').value,
+        qty: document.getElementById('iss-qty').value
+    };
+    apiCall('issueJob', payload, function(res) {
+        Toast.show(res.message, 'success');
+        Modal.close();
+        loadJobWork();
+    });
+};
+
+Modal.openReceiveJob = function(jobId) {
+    Modal.open("Receive Job", "<div style='text-align:center; padding: 20px;'><div class='spinner' style='width:30px;height:30px;margin: 0 auto 10px;'></div><p>Fetching Products...</p></div>");
+    
+    // Fetch products to bind as the Finished Good
+    apiCall('getProducts', {}, function(data) {
+        let products = data || [];
+        let pOptions = products.map(p => {
+             let priceText = p.JobWorkPrice ? `(₹${p.JobWorkPrice})` : "";
+             return `<option value="${p.ID}">${p.Name} ${priceText}</option>`;
+        }).join('');
+        
+        let html = `
+            <form onsubmit="app_submitReceiveJob(event, '${jobId}')">
+                <div class="form-group">
+                    <label class="form-label">Finished Product Received</label>
+                    <select id="rec-product" class="form-input" required>${pOptions}</select>
+                    <small style="color:var(--text-secondary);">&nbsp; This will lock the piece-rate price for future settlement.</small>
+                </div>
+                <div class="form-group" style="display:flex; gap:12px;">
+                    <div style="flex:1;">
+                        <label class="form-label">Good Qty Made</label>
+                        <input type="number" id="rec-qty" class="form-input" required>
+                    </div>
+                    <div style="flex:1;">
+                        <label class="form-label">Damage/Missing Qty</label>
+                        <input type="number" id="rec-dmg" class="form-input" value="0">
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding: 16px 0 0 0; border: none;">
+                    <button type="button" class="btn-secondary" onclick="Modal.close()">Cancel</button>
+                    <button type="submit" class="btn-primary" style="width:auto;">Verify & Receive</button>
+                </div>
+            </form>
+        `;
+        Modal.open("Receive Finished Goods", html);
+    }, null, true);
+};
+
+window.app_submitReceiveJob = function(e, jobId) {
+    e.preventDefault();
+    let payload = {
+        jobId: jobId,
+        productId: document.getElementById('rec-product').value,
+        readyQty: document.getElementById('rec-qty').value,
+        missingQty: document.getElementById('rec-dmg').value
+    };
+    apiCall('receiveJob', payload, function(res) {
+        Toast.show(res.message, 'success');
+        Modal.close();
+        loadJobWork();
+    });
+};
+
+Modal.openSettleJob = function(jobId, maxQtyToSettle, lockedPrice) {
+    let html = `
+        <form onsubmit="app_submitSettleJob(event, '${jobId}', ${lockedPrice}, ${maxQtyToSettle})">
+            <div class="surface-card" style="background:var(--bg-main); margin-bottom:16px;">
+                <p style="margin-bottom:8px;">Locked Piece-Rate: <b>₹${lockedPrice}</b></p>
+                <p>Max Unpaid Quantity: <b>${maxQtyToSettle} units</b></p>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Quantity to Settle Right Now</label>
+                <input type="number" id="set-qty" class="form-input" max="${maxQtyToSettle}" value="${maxQtyToSettle}" required oninput="document.getElementById('set-amount').innerText = '₹' + (this.value * ${lockedPrice}).toFixed(2)">
+            </div>
+            <div class="form-group">
+                <p>Transfer to Worker Salary Ledger: <b id="set-amount" style="font-size:20px; color:var(--status-success);">₹${(maxQtyToSettle * lockedPrice).toFixed(2)}</b></p>
+            </div>
+            <div class="modal-footer" style="padding: 16px 0 0 0; border: none;">
+                <button type="button" class="btn-secondary" onclick="Modal.close()">Cancel</button>
+                <button type="submit" class="btn-primary" style="width:auto; background:var(--status-success);">Confirm & Pay</button>
+            </div>
+        </form>
+    `;
+    Modal.open("Settle Job Payment", html);
+};
+
+window.app_submitSettleJob = function(e, jobId, price, maxQty) {
+    e.preventDefault();
+    let qty = document.getElementById('set-qty').value;
+    if (qty > maxQty) { Toast.show("Cannot settle more than limit!", "error"); return; }
+    
+    apiCall('settlePayment', { jobId: jobId, settleQty: qty }, function(res) {
+        Toast.show(res.message, 'success');
+        Modal.close();
+        loadJobWork();
+    });
+};
+
+function loadAttendanceUI(state, timeText) {
+    const statusText = document.getElementById('att-status-text');
+    if (state === 'active') {
+        if(statusText) statusText.innerHTML = `Checked In at <b>${timeText}</b>. Working...`;
+    } else {
+        if(statusText) statusText.innerHTML = `Not Checked In`;
+    }
+}
+

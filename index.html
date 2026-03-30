@@ -378,12 +378,51 @@
             </div>
         </div>
 
+        <!-- JOB WORK VIEW -->
+        <div id="template_jobwork">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
+                <h2 style="font-size: 24px; font-weight:600;">Job Work</h2>
+                <div class="admin-col" style="display:none;">
+                    <button class="btn-primary" onclick="triggerIssueJob()" style="width: auto;">
+                        <i class="material-icons-outlined" style="vertical-align: middle; font-size:18px;">handyman</i> Issue Job
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab Navigation for Filters -->
+            <div style="display:flex; gap:16px; margin-bottom:16px; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+                <button class="btn-secondary" style="border:none; border-bottom:2px solid var(--accent-primary); border-radius:0; color:var(--accent-primary);" id="tab-active-jobs">Active Jobs</button>
+                <button class="btn-secondary" style="border:none; border-radius:0;" id="tab-settled-jobs">Settlements</button>
+            </div>
+
+            <div class="surface-card">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date Issued</th>
+                                <th>Worker</th>
+                                <th>Raw Material Sent</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jobwork-tbody">
+                            <tr>
+                                <td colspan="5" style="text-align:center;">Loading jobs...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- PRODUCTS & MATERIALS VIEW -->
         <div id="template_products">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
                 <h2 style="font-size: 24px; font-weight:600;">Products & Materials</h2>
                 <div style="display:flex; gap:12px;">
-                    <button class="btn-primary" onclick="openAddProductModal()" style="width: auto;"><i
+                    <button class="btn-primary" onclick="triggerAddProduct()" style="width: auto;"><i
                             class="material-icons-outlined" style="vertical-align: middle; font-size:18px;">add</i>
                         Product</button>
                     <button class="btn-secondary" onclick="openAddMaterialModal()"><i class="material-icons-outlined"
@@ -398,14 +437,15 @@
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Brand</th>
                                 <th>Category</th>
-                                <th>Unit</th>
+                                <th>Job Work Price</th>
+                                <th>Brand</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="products-tbody">
                             <tr>
-                                <td colspan="4" style="text-align:center;">Loading products...</td>
+                                <td colspan="5" style="text-align:center;">Loading products...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -470,43 +510,21 @@
             }
         };
 
-        window.handleCheckIn = function () {
-            document.getElementById('btn-checkin').innerText = "Wait...";
-            setTimeout(() => {
-                document.getElementById('btn-checkin').style.display = 'none';
-                document.getElementById('btn-checkout').style.display = 'block';
-                document.getElementById('btn-checkout').innerText = "Check Out";
-                if (window.Toast) Toast.show("Checked In at " + new Date().toLocaleTimeString(), "success");
-
-                document.getElementById('attendance-tbody').innerHTML = `
-                    <tr style="border-bottom: 1px solid var(--border-color);">
-                        <td style="padding: 12px 16px;">${new Date().toLocaleDateString()}</td>
-                        <td style="padding: 12px 16px; color:var(--status-success); font-weight:600;">${new Date().toLocaleTimeString()}</td>
-                        <td style="padding: 12px 16px; color:var(--status-error); font-weight:600;" id="m-out">-</td>
-                        <td style="padding: 12px 16px;" id="m-hr">-</td>
-                    </tr>
-                `;
-            }, 800);
+        window.init_jobwork = function () {
+            if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
+                document.querySelectorAll('#template_jobwork .admin-col').forEach(el => el.style.display = 'block');
+            }
+            if (window.loadJobWork) window.loadJobWork();
         };
 
-        window.handleCheckOut = function () {
-            document.getElementById('btn-checkout').innerText = "Wait...";
-            setTimeout(() => {
-                document.getElementById('btn-checkout').style.display = 'none';
-                document.getElementById('btn-checkin').style.display = 'block';
-                document.getElementById('btn-checkin').innerText = "Check In";
-                if (window.Toast) Toast.show("Checked Out successfully", "warning");
-                if (document.getElementById('m-out')) {
-                    document.getElementById('m-out').innerText = new Date().toLocaleTimeString();
-                    document.getElementById('m-hr').innerText = "8.0 Hrs";
-                }
-            }, 800);
-        };
+        window.handleCheckIn = function () { if (window.handleAttendanceAction) window.handleAttendanceAction('in'); };
+        window.handleCheckOut = function () { if (window.handleAttendanceAction) window.handleAttendanceAction('out'); };
 
         // UI Triggers mapped to app.js
         window.closeModal = function () { if (window.Modal) window.Modal.close(); };
-        window.openAddProductModal = function () { if (window.Modal) window.Modal.openAddProduct(); };
+        window.triggerAddProduct = function () { if (window.triggerAddProduct) window.triggerAddProduct(); };
         window.openAddMaterialModal = function () { if (window.Modal) window.Modal.openAddMaterial(); };
+        window.triggerIssueJob = function () { if (window.triggerIssueJob) window.triggerIssueJob(); };
 
         window.init_workers = function () { if (window.loadWorkers) window.loadWorkers(); };
         window.init_products = function () { if (window.loadMasterData) window.loadMasterData(); };
