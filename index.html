@@ -301,7 +301,7 @@
                     Attendance — Geo-Fenced
                 </h2>
                 <div style="display:flex; gap:12px;">
-                    <button class="btn-secondary" onclick="openMonthlyReport()" style="border-radius:20px; background:rgba(255,255,255,0.05); border:none;"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle; color:var(--status-info);">summarize</i> Monthly Report</button>
+                    <button class="btn-secondary" onclick="document.getElementById('attendance-reports-container').scrollIntoView({behavior:'smooth'})" style="border-radius:20px; background:rgba(255,255,255,0.05); border:none;"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle; color:var(--status-info);">summarize</i> Monthly Overview</button>
                     <button class="btn-primary" style="border-radius:20px; width:auto; padding:10px 20px; background:var(--accent-gradient); box-shadow:0 0 15px rgba(140,82,255,0.4);"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle;">settings</i> Configure Fence</button>
                 </div>
             </div>
@@ -420,37 +420,35 @@
             </div>
 
             <!-- Attendance Data Table -->
-            <div class="surface-card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:12px;">
-                    <h3 style="display:flex; align-items:center; gap:8px;"><i class="material-icons-outlined" style="color:var(--accent-secondary);">receipt_long</i> Attendance Log</h3>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                        <button class="btn-secondary" style="border-radius:20px; padding:6px 16px; background:rgba(140,82,255,0.1); color:var(--accent-primary); border-color:var(--accent-primary);">All</button>
-                        <button class="btn-secondary" style="border-radius:20px; padding:6px 16px; border:none;">Present</button>
-                        <button class="btn-secondary" style="border-radius:20px; padding:6px 16px; border:none;">Absent</button>
-                        <span style="width:1px; height:20px; background:var(--border-color); margin:0 8px;"></span>
-                        <button class="btn-secondary" style="border-radius:20px; padding:6px 16px;"><i class="material-icons-outlined" style="font-size:14px; vertical-align:middle;">download</i> Export</button>
+            <!-- Attendance Reports (Worker Wise Cards) -->
+            <div class="surface-card" style="margin-top:24px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px; flex-wrap:wrap; gap:16px;">
+                    <h3 style="display:flex; align-items:center; gap:8px;"><i class="material-icons-outlined" style="color:var(--accent-secondary);">calendar_month</i> Attendance Overview</h3>
+                    <div style="display:flex; gap:12px; align-items:center;">
+                         <select id="ov-month" class="form-input" style="width:120px; padding:8px 12px; font-size:14px;" onchange="loadAttendanceOverview()">
+                            <option value="1">Jan</option>
+                            <option value="2">Feb</option>
+                            <option value="3" selected>Mar</option>
+                            <option value="4">Apr</option>
+                            <option value="5">May</option>
+                            <option value="6">Jun</option>
+                            <option value="7">Jul</option>
+                            <option value="8">Aug</option>
+                            <option value="9">Sep</option>
+                            <option value="10">Oct</option>
+                            <option value="11">Nov</option>
+                            <option value="12">Dec</option>
+                         </select>
+                         <select id="ov-year" class="form-input" style="width:100px; padding:8px 12px; font-size:14px;" onchange="loadAttendanceOverview()">
+                            <option value="2025">2025</option>
+                            <option value="2026" selected>2026</option>
+                         </select>
+                         <button class="btn-secondary" style="border-radius:20px; padding:6px 16px;"><i class="material-icons-outlined" style="font-size:14px; vertical-align:middle;">download</i> Export</button>
                     </div>
                 </div>
 
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th style="width:40px;">#</th>
-                                <th>Worker</th>
-                                <th>Check In</th>
-                                <th>Check Out</th>
-                                <th>Duration</th>
-                                <th>Out of Range Info</th>
-                                <th>Shift Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="attendance-tbody">
-                            <tr>
-                                <td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Log data will populate here.</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div id="attendance-reports-container" style="display:flex; flex-direction:column; gap:20px; min-height:100px;">
+                    <!-- Population here in app.js -->
                 </div>
             </div>
             <style>

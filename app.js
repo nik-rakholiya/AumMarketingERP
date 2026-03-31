@@ -554,51 +554,57 @@ function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
 
 window.init_attendance = function () {
     if (!currentUser) return;
+    const currentState = localStorage.getItem('att_shiftState') || 'not_started';
     
-    // Hide UI blocks from Workers unconditionally
+    // 1. Initial UI Updates
+    updateAttendanceButtons(currentState);
+    
+    // 2. Set default month/year for overview based on current date
+    const now = new Date();
+    const ovMonth = document.getElementById('ov-month');
+    const ovYear = document.getElementById('ov-year');
+    if (ovMonth) ovMonth.value = now.getMonth() + 1;
+    if (ovYear) ovYear.value = now.getFullYear();
+
+    // 3. Populate inline reports (The new "Worker-wise" overview)
+    loadAttendanceOverview(); 
+    
+    // 4. Role based layout adjustments
     if (currentUser.role === 'Worker') {
         const adminWidgets = document.getElementById('admin-attendance-widgets');
         if (adminWidgets) adminWidgets.style.display = 'none';
         
-        // Also hide Worker Column in table
-        document.querySelectorAll('.admin-col').forEach(el => el.style.display = 'none');
-    } else {
-        document.querySelectorAll('.admin-col').forEach(el => el.style.display = 'table-cell');
+        // Change grid to 1 column for worker
+        const dashboardGrid = adminWidgets ? adminWidgets.parentElement : null;
+        if (dashboardGrid) {
+            dashboardGrid.style.gridTemplateColumns = '1fr';
+        }
     }
 
-    // Refresh display
-    let currentState = localStorage.getItem('att_shiftState') || 'not_started';
-    updateAttendanceButtons(currentState);
-    
-    // Start Clock Tick
+    // 5. Start Geo-Tracking if already active
+    if (currentState === 'active') startSilentGeoTracking();
+
+    // 6. Start Digital Clock Tick
     if (clockInterval) clearInterval(clockInterval);
     const updateClock = () => {
         const timeEl = document.getElementById('clock-time');
         const dateEl = document.getElementById('clock-date');
         if (!timeEl || !dateEl) return;
         
-        const now = new Date();
-        const state = localStorage.getItem('att_shiftState') || 'not_started';
-        dateEl.innerText = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        const tickNow = new Date();
+        const tickState = localStorage.getItem('att_shiftState') || 'not_started';
+        dateEl.innerText = tickNow.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         
-        // Show Stop Watch Time if checked in, else show normal 00:00:00 or system time
-        if (state !== 'not_started') {
+        if (tickState !== 'not_started') {
             timeEl.innerText = calculateCurrentDurationString();
-            refreshActiveTableRow();
         } else {
-            timeEl.innerText = "00:00:00"; // Stop watch is zeroed out
+            timeEl.innerText = "00:00:00";
         }
     };
-    
-    updateClock();
     clockInterval = setInterval(updateClock, 1000);
+    updateClock();
 
-    // If active or paused, resume tracking location silently
-    if (currentState === 'active' || currentState === 'paused') {
-        startSilentGeoTracking();
-    }
-    
-    // Initial UI render
+    // 7. Initial Table Populate (State message)
     loadAttendanceUI(currentState);
 };
 
@@ -1159,40 +1165,16 @@ window.app_saveSettings = function (e) {
 };
 
 /* =========================================================================
-   REPORTS / MONTHLY CALENDAR LOGIC
+   WORKER-WISE ATTENDANCE OVERVIEW (Main Dashboard)
 ========================================================================= */
-window.openMonthlyReport = function() {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
+window.loadAttendanceOverview = async function() {
+    const container = document.getElementById('attendance-reports-container');
+    if (!container) return;
 
-    let html = `
-    <div style="padding: 10px;">
-        <div style="display:flex; gap:12px; margin-bottom:20px; align-items:center;">
-             <select id="rep-month" class="form-input" style="width:140px;">
-                ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m,i) => `<option value="${i+1}" ${i+1===currentMonth?'selected':''}>${m}</option>`).join('')}
-             </select>
-             <select id="rep-year" class="form-input" style="width:100px;">
-                ${[2024,2025,2026].map(y => `<option value="${y}" ${y===currentYear?'selected':''}>${y}</option>`).join('')}
-             </select>
-             <button class="btn-primary" onclick="renderMonthlyData()" style="width:auto; padding:10px 20px;">View Report</button>
-        </div>
-        <div id="report-results" style="min-height:200px; max-height:60vh; overflow-y:auto;">
-             <p style="text-align:center; color:var(--text-secondary); margin-top:40px;">Click View Report to load data.</p>
-        </div>
-    </div>`;
+    const month = document.getElementById('ov-month').value;
+    const year = document.getElementById('ov-year').value;
 
-    Modal.open("Monthly Attendance Report", html);
-    // Auto-trigger first load
-    setTimeout(renderMonthlyData, 300);
-};
-
-window.renderMonthlyData = async function() {
-    const month = document.getElementById('rep-month').value;
-    const year = document.getElementById('rep-year').value;
-    const results = document.getElementById('report-results');
-    
-    results.innerHTML = `<div style="text-align:center; padding:40px;"><div class="spinner" style="margin:0 auto;"></div><p>Fetching logs...</p></div>`;
+    container.innerHTML = `<div style="text-align:center; padding:40px;"><div class="spinner" style="margin:0 auto;"></div><p style="color:var(--text-secondary); margin-top:12px;">Loading worker-wise overview...</p></div>`;
 
     try {
         const workersRes = await fetch(APPS_SCRIPT_WEB_APP_URL, { 
@@ -1209,11 +1191,11 @@ window.renderMonthlyData = async function() {
         let displayWorkers = (currentUser.role === 'Worker') ? workers.filter(w => w.ID === currentUser.id) : workers;
 
         if (displayWorkers.length === 0) {
-            results.innerHTML = `<p style="text-align:center; color:var(--text-secondary); margin-top:40px;">No workers found.</p>`;
+            container.innerHTML = `<p style="text-align:center; color:var(--text-secondary); padding:40px;">No records found for this selection.</p>`;
             return;
         }
 
-        let reportHTML = '';
+        let html = '';
         const daysInMonth = new Date(year, month, 0).getDate();
 
         displayWorkers.forEach(worker => {
@@ -1222,8 +1204,7 @@ window.renderMonthlyData = async function() {
             let presentDates = [...new Set(workerLogs.map(l => l.Date))];
             let presentCount = presentDates.length;
             
-            let dayShifts = 0;
-            let nightShifts = 0;
+            let dayShifts = 0, nightShifts = 0;
             workerLogs.forEach(l => {
                 if (!l.CheckInTime) return;
                 let isNight = l.CheckInTime.includes('PM') || (l.CheckInTime.includes('AM') && parseInt(l.CheckInTime.split(':')[0]) < 6);
@@ -1232,59 +1213,67 @@ window.renderMonthlyData = async function() {
 
             let absentCount = daysInMonth - presentCount;
             if (parseInt(year) === new Date().getFullYear() && parseInt(month) === (new Date().getMonth()+1)) {
-                let todayDay = new Date().getDate();
-                absentCount = todayDay - presentCount;
+                absentCount = new Date().getDate() - presentCount;
                 if (absentCount < 0) absentCount = 0;
             }
 
-            reportHTML += `
+            html += `
             <div class="report-card" style="margin-bottom:12px;">
-                <div class="report-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')" style="padding:12px 16px;">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span style="font-weight:600; font-size:14px;">${worker.Name}</span>
-                        <i class="material-icons-outlined" style="font-size:16px;">expand_more</i>
+                <div class="report-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')" style="padding:16px 20px;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:36px; height:36px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; color:white; font-weight:bold;">${worker.Name.charAt(0).toUpperCase()}</div>
+                        <div>
+                            <span style="font-weight:600; display:block;">${worker.Name}</span>
+                            <span style="font-size:11px; color:var(--text-secondary);">${worker.Role}</span>
+                        </div>
                     </div>
-                    <div class="summary-stats" style="margin-bottom:0; gap:12px;">
-                        <div class="stat-item"><span class="val val-p" style="font-size:12px;">${presentCount}</span><span class="lbl" style="font-size:7px;">P</span></div>
-                        <div class="stat-item"><span class="val val-a" style="font-size:12px;">${absentCount}</span><span class="lbl" style="font-size:7px;">A</span></div>
-                        <div class="stat-item"><span class="val val-d" style="font-size:12px;">${dayShifts}</span><span class="lbl" style="font-size:7px;">D</span></div>
-                        <div class="stat-item"><span class="val val-n" style="font-size:12px;">${nightShifts}</span><span class="lbl" style="font-size:7px;">N</span></div>
+                    <div class="summary-stats" style="margin-bottom:0; gap:20px;">
+                        <div class="stat-item"><span class="val val-p">${presentCount}</span><span class="lbl">P</span></div>
+                        <div class="stat-item"><span class="val val-a">${absentCount}</span><span class="lbl">A</span></div>
+                        <div class="stat-item"><span class="val val-d">${dayShifts}</span><span class="lbl">D</span></div>
+                        <div class="stat-item"><span class="val val-n">${nightShifts}</span><span class="lbl">N</span></div>
                     </div>
+                    <i class="material-icons-outlined" style="color:var(--text-secondary);">expand_more</i>
                 </div>
-                <div class="report-card-body hidden" style="padding:12px;">
-                    <div class="calendar-grid">
+                <div class="report-card-body hidden" style="padding:20px; background:rgba(255,255,255,0.01);">
+                    <div class="calendar-grid" style="margin-bottom:24px;">
                         ${Array.from({length: daysInMonth}, (_, i) => {
                             let d = (i + 1).toString().padStart(2, '0');
                             let dateStr = `${d}/${month.toString().padStart(2,'0')}/${year}`;
                             let isPresent = presentDates.includes(dateStr);
                             let cls = isPresent ? 'present' : ( (new Date(year, month-1, i+1) <= new Date()) ? 'absent' : '' );
-                            return `<div class="day-bubble ${cls}" style="width:24px; height:24px; font-size:10px;">${i+1}</div>`;
+                            return `<div class="day-bubble ${cls}">${i+1}</div>`;
                         }).join('')}
                     </div>
                     <div class="table-responsive" style="border:none;">
-                        <table class="data-table" style="font-size:10px;">
-                            <thead><tr><th>DATE</th><th>IN</th><th>OUT</th><th>SHIFT</th><th>DUR</th></tr></thead>
+                        <table class="data-table" style="font-size:12px;">
+                            <thead>
+                                <tr style="background:transparent;"><th style="border:none;">DATE</th><th style="border:none;">IN</th><th style="border:none;">OUT</th><th style="border:none;">SHIFT</th><th style="border:none;">DUR</th></tr>
+                            </thead>
                             <tbody>
                                 ${workerLogs.map(l => {
                                     let isNight = l.CheckInTime && (l.CheckInTime.includes('PM') || (l.CheckInTime.includes('AM') && parseInt(l.CheckInTime.split(':')[0]) < 6));
                                     return `<tr>
-                                        <td>${l.Date}</td>
+                                        <td><b>${l.Date}</b></td>
                                         <td>${l.CheckInTime}</td>
                                         <td>${l.CheckOutTime || '—'}</td>
-                                        <td><i class="material-icons-outlined" style="font-size:12px;">${isNight?'dark_mode':'light_mode'}</i></td>
+                                        <td><i class="material-icons-outlined" style="font-size:16px; color:${isNight?'var(--accent-primary)':'var(--status-warning)'}">${isNight?'dark_mode':'light_mode'}</i></td>
                                         <td style="color:var(--status-success); font-weight:600;">${l.TotalHours || '—'}</td>
                                     </tr>`;
-                                }).join('') || '<tr><td colspan="5" style="text-align:center;">No data</td></tr>'}
+                                }).join('') || '<tr><td colspan="5" style="text-align:center;">No entries yet.</td></tr>'}
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>`;
         });
-        results.innerHTML = reportHTML;
+
+        container.innerHTML = html || `<p style="text-align:center; padding:40px;">No workers found.</p>`;
+
     } catch (e) {
-        results.innerHTML = `<p style="text-align:center; color:var(--status-error);">Error: ${e.message}</p>`;
+        container.innerHTML = `<p style="text-align:center; color:var(--status-error); padding:40px;">Error: ${e.message}</p>`;
     }
 };
+
 
 
