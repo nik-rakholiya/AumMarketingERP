@@ -301,6 +301,7 @@
                     Attendance — Geo-Fenced
                 </h2>
                 <div style="display:flex; gap:12px;">
+                    <button class="btn-secondary" onclick="openApplyLeave()" style="border-radius:20px; background:rgba(140,82,255,0.1); border-color:var(--accent-primary); color:var(--accent-primary);"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle;">event_available</i> Apply Leave</button>
                     <button class="btn-secondary" onclick="document.getElementById('attendance-reports-container').scrollIntoView({behavior:'smooth'})" style="border-radius:20px; background:rgba(255,255,255,0.05); border:none;"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle; color:var(--status-info);">summarize</i> Monthly Overview</button>
                     <button class="btn-primary" style="border-radius:20px; width:auto; padding:10px 20px; background:var(--accent-gradient); box-shadow:0 0 15px rgba(140,82,255,0.4);"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle;">settings</i> Configure Fence</button>
                 </div>
@@ -376,10 +377,9 @@
                             <div style="position:absolute; width:100px; height:100px; border:1px dashed rgba(140,82,255,0.3); border-radius:50%; animation:spin 10s linear infinite reverse;"></div>
                             
                             <!-- Dots representing workers -->
-                            <div style="position:absolute; width:24px; height:24px; background:var(--status-success); border-radius:50%; transform:translate(-20px, 10px); color:#000; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; box-shadow:0 0 10px var(--status-success);">S</div>
-                            <div style="position:absolute; width:24px; height:24px; background:var(--status-success); border-radius:50%; transform:translate(30px, -20px); color:#000; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; box-shadow:0 0 10px var(--status-success);">P</div>
-                            <div style="position:absolute; width:24px; height:24px; background:var(--status-warning); border-radius:50%; transform:translate(10px, 30px); color:#000; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; box-shadow:0 0 10px var(--status-warning);">M</div>
-                            <div style="position:absolute; width:24px; height:24px; background:var(--status-error); border-radius:50%; transform:translate(80px, 20px); color:#fff; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; box-shadow:0 0 10px var(--status-error);">V</div>
+                            <div id="radar-dots-container" style="position:absolute; width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+                                <!-- Dynamic dots injected here via updateAdminRadar() -->
+                            </div>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; font-size:12px; color:var(--text-secondary);">
                             <div style="display:flex; gap:12px;">
@@ -447,10 +447,34 @@
                     </div>
                 </div>
 
-                <div id="attendance-reports-container" style="display:flex; flex-direction:column; gap:20px; min-height:100px;">
-                    <!-- Population here in app.js -->
+                <!-- Leave Approvals UI (Admin Only) -->
+            <div id="admin-leave-approvals" class="hidden" style="margin-top: 24px;">
+                <h3 style="margin-bottom: 16px; display:flex; align-items:center; gap:8px;"><i class="material-icons-outlined" style="color:var(--accent-primary);">approval</i> Pending Leave Requests</h3>
+                <div class="surface-card">
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Worker</th>
+                                    <th>Date</th>
+                                    <th>Reason</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leaves-approval-tbody">
+                                <tr><td colspan="5" style="text-align:center; padding:24px;">Loading requests...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
+
+            <!-- Dashboard / Monthly Reports -->
+            <div id="attendance-reports-container" class="attendance-reports-grid" style="margin-top: 24px;">
+                <!-- Cards injected here -->
+            </div>
+        </div>
             <style>
                 @keyframes spin { 100% { transform: rotate(360deg); } }
             </style>
@@ -602,9 +626,17 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Geo-Fence Radius (Meters) - Under construction</label>
-                        <input type="number" id="set-radius" class="form-input" placeholder="e.g. 100">
-                        <small style="color:var(--text-secondary);">Currently only captures Lat/Long. Fence blocking feature pending.</small>
+                        <label class="form-label" style="display:flex; justify-content:space-between;">
+                            Geo-Fence Radius (Meters)
+                            <b id="lbl-radius" style="color:var(--accent-primary);">200m</b>
+                        </label>
+                        <input type="range" id="set-radius" class="form-input" min="50" max="1000" step="50" value="200" style="padding:0; margin:10px 0;" oninput="updateRadiusVisualizer(this.value)">
+                        
+                        <!-- Radius Visualizer Preview -->
+                        <div id="radius-preview-container" style="position:relative; width:100%; height:160px; background:rgba(255,255,255,0.02); border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--border-color); margin-top:10px;">
+                            <i class="material-icons-outlined" style="font-size:32px; color:var(--accent-secondary); z-index:2;">domain</i>
+                            <div id="radius-ring" style="position:absolute; width:100px; height:100px; border:2px solid var(--accent-primary); border-radius:50%; background:rgba(140,82,255,0.05); transition: scale 0.2s ease-out; animation: pulse 3s infinite;"></div>
+                        </div>
                     </div>
                     <div style="margin-top: 24px;">
                         <button type="submit" class="btn-primary" style="width:auto; padding: 10px 24px;"><i class="material-icons-outlined" style="vertical-align:middle; font-size:18px;">save</i> Save Config</button>

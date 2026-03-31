@@ -144,12 +144,12 @@ function toggleAuthForm(target) {
 
 function handleLogin(e) {
     e.preventDefault();
-    const phone = document.getElementById('login-phone').value;
+    const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-password').value;
     const btn = document.getElementById('login-btn');
     btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px"></div>';
 
-    apiCall('workerLogin', { phone: phone, password: pass }, function (res) {
+    apiCall('workerLogin', { email: email, password: pass }, function (res) {
         btn.innerHTML = '<span class="btn-text">Sign In</span>';
         localStorage.setItem('sessionToken', res.token);
         localStorage.setItem('userData', JSON.stringify(res.user));
@@ -163,12 +163,13 @@ function handleLogin(e) {
 function handleSignup(e) {
     e.preventDefault();
     const name = document.getElementById('signup-name').value;
+    const email = document.getElementById('signup-email').value;
     const phone = document.getElementById('signup-phone').value;
     const pass = document.getElementById('signup-password').value;
     const btn = document.getElementById('signup-btn');
     btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px"></div>';
 
-    apiCall('workerSignup', { name: name, phone: phone, password: pass }, function (res) {
+    apiCall('workerSignup', { name: name, email: email, phone: phone, password: pass }, function (res) {
         btn.innerHTML = '<span class="btn-text">Register Attempt</span>';
         Toast.show(res.message, 'success');
         toggleAuthForm('login');
@@ -570,15 +571,23 @@ window.init_attendance = function () {
     loadAttendanceOverview(); 
     
     // 4. Role based layout adjustments
-    if (currentUser.role === 'Worker') {
+    if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
+        const adminWidgets = document.getElementById('admin-attendance-widgets');
+        if (adminWidgets) adminWidgets.style.display = 'flex';
+        
+        const leaveApprovals = document.getElementById('admin-leave-approvals');
+        if (leaveApprovals) leaveApprovals.classList.remove('hidden');
+        
+        loadLeaveApprovals();
+        updateAdminRadar();
+        if (window.radarInterval) clearInterval(window.radarInterval);
+        window.radarInterval = setInterval(updateAdminRadar, 30000);
+    } else {
         const adminWidgets = document.getElementById('admin-attendance-widgets');
         if (adminWidgets) adminWidgets.style.display = 'none';
         
-        // Change grid to 1 column for worker
-        const dashboardGrid = adminWidgets ? adminWidgets.parentElement : null;
-        if (dashboardGrid) {
-            dashboardGrid.style.gridTemplateColumns = '1fr';
-        }
+        const leaveApprovals = document.getElementById('admin-leave-approvals');
+        if (leaveApprovals) leaveApprovals.classList.add('hidden');
     }
 
     // 5. Start Geo-Tracking if already active
@@ -607,6 +616,145 @@ window.init_attendance = function () {
     // 7. Initial Table Populate (State message)
     loadAttendanceUI(currentState);
 };
+
+window.updateRadiusVisualizer = function(val) {
+    const lbl = document.getElementById('lbl-radius');
+    const ring = document.getElementById('radius-ring');
+    if (lbl) lbl.innerText = val + 'm';
+    if (ring) {
+        // Map 50-1000m to 20px-300px scale
+        let size = 40 + (val / 1000) * 200;
+        ring.style.width = size + 'px';
+        ring.style.height = size + 'px';
+    }
+};
+
+window.updateAdminRadar = function() {
+    const radarContainer = document.getElementById('radar-dots-container');
+    if (!radarContainer || currentUser.role !== 'Admin') return;
+
+    apiCall('getAttendanceLogs', { date: new Date().toLocaleDateString() }, function(logs) {
+        // Find active sessions (checked in but not checked out)
+        const activeSessions = logs.filter(l => l.CheckInTime && (!l.CheckOutTime || l.CheckOutTime === '-'));
+        
+        let dotsHtml = '';
+        activeSessions.forEach((session, index) => {
+            // Mocking position if lat/long is missing, otherwise calculate relative to center
+            let x = Math.sin(index * 2) * 60;
+            let y = Math.cos(index * 2) * 60;
+            
+            if (session.CheckInLat && window.AppConfig.OfficeLat) {
+                // Simplified relative positioning for the radar graphic
+                let latDiff = (session.CheckInLat - window.AppConfig.OfficeLat) * 10000;
+                let lngDiff = (session.CheckInLong - window.AppConfig.OfficeLng) * 10000;
+                x = Math.max(-100, Math.min(100, lngDiff));
+                y = Math.max(-100, Math.min(100, latDiff));
+            }
+
+            dotsHtml += `
+                <div class="radar-dot" style="transform:translate(${x}px, ${y}px);" title="${session.WorkerID}">
+                    ${session.WorkerID.charAt(0)}
+                </div>
+            `;
+        });
+        radarContainer.innerHTML = dotsHtml;
+    }, null, true);
+};
+
+window.loadLeaveApprovals = function() {
+    const vc = document.getElementById('view-container');
+    const table = vc.querySelector('#leaves-approval-tbody');
+    if (!table || currentUser.role !== 'Admin') return;
+
+    apiCall('getLeaves', {}, function(leaves) {
+        const pending = leaves.filter(lv => lv.Status === 'Pending');
+        if (pending.length === 0) {
+            table.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:24px; color:var(--text-secondary);">No pending leave requests.</td></tr>';
+            return;
+        }
+
+        table.innerHTML = pending.map(lv => `
+            <tr>
+                <td><b>${lv.WorkerName}</b></td>
+                <td>${lv.Date}</td>
+                <td>${lv.Reason || '-'}</td>
+                <td><span class="badge pending">Pending</span></td>
+                <td>
+                    <div style="display:flex; gap:8px;">
+                        <button class="icon-btn" style="color:var(--status-success);" onclick="processLeave('${lv.ID}', 'Approved')"><i class="material-icons-outlined">check_circle</i></button>
+                        <button class="icon-btn" style="color:var(--status-error);" onclick="processLeave('${lv.ID}', 'Rejected')"><i class="material-icons-outlined">cancel</i></button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }, null, true);
+};
+
+window.processLeave = function(id, status) {
+    apiCall('approveLeave', { leaveId: id, status: status, adminName: currentUser.name }, function(res) {
+        Toast.show(res.message, 'success');
+        loadLeaveApprovals();
+        loadAttendanceOverview(); // Refresh overview too
+    });
+};
+window.formatTime12h = function(dateStr) {
+    if (!dateStr || dateStr === "-") return "-";
+    // Check if its already formatted
+    if (dateStr.includes('AM') || dateStr.includes('PM')) return dateStr;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr; 
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+};
+
+window.formatDurationHms = function(seconds) {
+    if (!seconds || seconds === "-") return "-";
+    if (typeof seconds === "string" && seconds.includes(':')) {
+        let parts = seconds.split(':');
+        if (parts.length === 3) {
+            let h = parseInt(parts[0]), m = parseInt(parts[1]);
+            return `${h}h ${m}m`;
+        }
+    }
+    let h = Math.floor(seconds / 3600);
+    let m = Math.floor((seconds % 3600) / 60);
+    return `${h}h ${m}m`;
+};
+
+window.openApplyLeave = function() {
+    const html = `
+        <form onsubmit="handleApplyLeave(event)">
+            <div class="form-group">
+                <label class="form-label">Date (DD/MM/YYYY)</label>
+                <input type="text" id="l-date" class="form-input" placeholder="e.g. ${new Date().toLocaleDateString()}" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Reason</label>
+                <textarea id="l-reason" class="form-input" style="height:80px;" placeholder="Reason for leave..."></textarea>
+            </div>
+            <div class="modal-footer" style="padding: 16px 0 0 0; border: none;">
+                <button type="button" class="btn-secondary" onclick="Modal.close()">Cancel</button>
+                <button type="submit" class="btn-primary" style="width:auto;">Submit Request</button>
+            </div>
+        </form>
+    `;
+    Modal.open("Apply for Leave", html);
+};
+
+window.handleApplyLeave = function(e) {
+    e.preventDefault();
+    const payload = {
+        workerId: currentUser.id,
+        workerName: currentUser.name,
+        date: document.getElementById('l-date').value,
+        reason: document.getElementById('l-reason').value
+    };
+    apiCall('applyLeave', payload, function(res) {
+        Toast.show(res.message, 'success');
+        Modal.close();
+        if (activeView === 'attendance') loadAttendanceOverview();
+    });
+};
+
 
 // Unified button handler from UI click
 window.handleAttendanceAction = function (actionType) {
@@ -1167,7 +1315,10 @@ window.app_saveSettings = function (e) {
 /* =========================================================================
    WORKER-WISE ATTENDANCE OVERVIEW (Main Dashboard)
 ========================================================================= */
-window.loadAttendanceOverview = async function() {
+/* =========================================================================
+   WORKER-WISE ATTENDANCE OVERVIEW (Main Dashboard)
+========================================================================= */
+window.loadAttendanceOverview = function() {
     const container = document.getElementById('attendance-reports-container');
     if (!container) return;
 
@@ -1176,17 +1327,15 @@ window.loadAttendanceOverview = async function() {
 
     container.innerHTML = `<div style="text-align:center; padding:40px;"><div class="spinner" style="margin:0 auto;"></div><p style="color:var(--text-secondary); margin-top:12px;">Loading worker-wise overview...</p></div>`;
 
-    try {
-        const workersRes = await fetch(APPS_SCRIPT_WEB_APP_URL, { 
-            method: 'POST', body: JSON.stringify({ action: 'getWorkers', data: {} }), headers: { 'Content-Type': 'text/plain' } 
-        }).then(r => r.json());
-        
-        const logsRes = await fetch(APPS_SCRIPT_WEB_APP_URL, { 
-            method: 'POST', body: JSON.stringify({ action: 'getAttendanceLogs', data: { month: month.padStart(2,'0'), year: year } }), headers: { 'Content-Type': 'text/plain' } 
-        }).then(r => r.json());
-
-        const workers = (workersRes.data || []).filter(w => w.Status === 'Active');
-        const logs = logsRes.data || [];
+    // Fetch Workers, Logs, and Leaves in parallel
+    Promise.all([
+        apiCallPromise('getWorkers', {}),
+        apiCallPromise('getAttendanceLogs', { month: month.padStart(2, '0'), year: year }),
+        apiCallPromise('getLeaves', {})
+    ]).then(([workersRes, logsRes, leavesRes]) => {
+        const workers = (workersRes || []).filter(w => w.Status === 'Active');
+        const logs = logsRes || [];
+        const leaves = (leavesRes || []).filter(lv => lv.Status === 'Approved');
         
         let displayWorkers = (currentUser.role === 'Worker') ? workers.filter(w => w.ID === currentUser.id) : workers;
 
@@ -1195,85 +1344,121 @@ window.loadAttendanceOverview = async function() {
             return;
         }
 
-        let html = '';
         const daysInMonth = new Date(year, month, 0).getDate();
+        let htmlContent = '';
 
         displayWorkers.forEach(worker => {
             const workerLogs = logs.filter(l => l.WorkerID === worker.ID);
+            const workerLeaves = leaves.filter(lv => lv.WorkerID === worker.ID);
             
             let presentDates = [...new Set(workerLogs.map(l => l.Date))];
-            let presentCount = presentDates.length;
+            let leaveDates = workerLeaves.map(lv => lv.Date);
             
+            // Calculate stats
             let dayShifts = 0, nightShifts = 0;
             workerLogs.forEach(l => {
                 if (!l.CheckInTime) return;
+                // Shift detection logic (Customizable)
                 let isNight = l.CheckInTime.includes('PM') || (l.CheckInTime.includes('AM') && parseInt(l.CheckInTime.split(':')[0]) < 6);
                 if (isNight) nightShifts++; else dayShifts++;
             });
 
-            let absentCount = daysInMonth - presentCount;
-            if (parseInt(year) === new Date().getFullYear() && parseInt(month) === (new Date().getMonth()+1)) {
-                absentCount = new Date().getDate() - presentCount;
-                if (absentCount < 0) absentCount = 0;
+            // Build Day Bubbles
+            let bubblesHtml = '';
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = `${d.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
+                const isPresent = presentDates.includes(dateStr);
+                const isOnLeave = leaveDates.includes(dateStr);
+                
+                let cls = '';
+                if (isPresent) cls = 'present';
+                else if (isOnLeave) cls = 'leave';
+                else if (new Date(year, month - 1, d) < new Date().setHours(0,0,0,0)) cls = 'absent';
+                
+                bubblesHtml += `<div class="day-bubble ${cls}" title="Day ${d}">${d}</div>`;
             }
 
-            html += `
-            <div class="report-card" style="margin-bottom:12px;">
-                <div class="report-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')" style="padding:16px 20px;">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <div style="width:36px; height:36px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; color:white; font-weight:bold;">${worker.Name.charAt(0).toUpperCase()}</div>
-                        <div>
-                            <span style="font-weight:600; display:block;">${worker.Name}</span>
-                            <span style="font-size:11px; color:var(--text-secondary);">${worker.Role}</span>
+            htmlContent += `
+                <div class="report-card">
+                    <div class="report-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                        <div style="display:flex; gap:12px; align-items:center;">
+                            <div class="avatar" style="width:40px; height:40px; font-size:16px;">${worker.Name.charAt(0)}</div>
+                            <div>
+                                <div style="font-weight:600; color:var(--text-primary); text-transform:capitalize;">${worker.Name}</div>
+                                <div style="font-size:12px; color:var(--text-secondary);">${worker.Role}</div>
+                            </div>
+                        </div>
+                        <div class="stats-summary" style="display:flex; gap:16px;">
+                            <div class="stat-pill"><span class="dot present"></span> ${presentDates.length}P</div>
+                            <div class="stat-pill"><span class="dot leave"></span> ${leaveDates.length}L</div>
+                            <div class="stat-pill"><span class="dot night"></span> ${nightShifts}N</div>
+                            <i class="material-icons-outlined" style="font-size:18px; color:var(--text-secondary); margin-left:8px;">expand_more</i>
                         </div>
                     </div>
-                    <div class="summary-stats" style="margin-bottom:0; gap:20px;">
-                        <div class="stat-item"><span class="val val-p">${presentCount}</span><span class="lbl">P</span></div>
-                        <div class="stat-item"><span class="val val-a">${absentCount}</span><span class="lbl">A</span></div>
-                        <div class="stat-item"><span class="val val-d">${dayShifts}</span><span class="lbl">D</span></div>
-                        <div class="stat-item"><span class="val val-n">${nightShifts}</span><span class="lbl">N</span></div>
+                    
+                    <div class="report-card-body hidden">
+                        <!-- 1-31 Bubbles -->
+                        <div class="calendar-row" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            ${bubblesHtml}
+                        </div>
+                        
+                        <!-- Daily Log Table -->
+                        <div class="table-responsive" style="border:none;">
+                            <table class="data-table" style="font-size:12px;">
+                                <thead>
+                                    <tr style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.05);">
+                                        <th style="padding:8px;">DATE</th>
+                                        <th style="padding:8px;">IN</th>
+                                        <th style="padding:8px;">OUT</th>
+                                        <th style="padding:8px; width:40px;">TYPE</th>
+                                        <th style="padding:8px; text-align:right;">TOTAL</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${workerLogs.map(l => {
+                                        let isN = l.CheckInTime && (l.CheckInTime.includes('PM') || (l.CheckInTime.includes('AM') && parseInt(l.CheckInTime.split(':')[0]) < 6));
+                                        return `<tr>
+                                            <td style="padding:8px;">${l.Date}</td>
+                                            <td style="padding:8px; color:var(--status-success);">${formatTime12h(l.CheckInTime)}</td>
+                                            <td style="padding:8px; color:var(--status-error);">${formatTime12h(l.CheckOutTime)}</td>
+                                            <td style="padding:8px; text-align:center;"><i class="material-icons-outlined" style="font-size:16px; color:${isN?'var(--accent-primary)':'var(--status-warning)'}">${isN?'dark_mode':'light_mode'}</i></td>
+                                            <td style="padding:8px; text-align:right; font-weight:600; color:var(--accent-secondary);">${formatDurationHms(l.TotalHours)}</td>
+                                        </tr>`;
+                                    }).join('')}
+                                    ${workerLeaves.map(lv => `
+                                        <tr style="background:rgba(0,191,255,0.03);">
+                                            <td style="padding:8px;">${lv.Date}</td>
+                                            <td colspan="3" style="padding:8px; color:var(--status-info); font-weight:500;">
+                                                <i class="material-icons-outlined" style="font-size:14px; vertical-align:middle; margin-right:4px;">event_available</i>
+                                                APPROVED LEAVE (${lv.Reason || 'No reason'})
+                                            </td>
+                                            <td style="padding:8px; text-align:right; color:var(--status-info);">0h</td>
+                                        </tr>
+                                    `).join('')}
+                                    ${(workerLogs.length === 0 && workerLeaves.length === 0) ? `<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-secondary);">No logs or leaves recorded for this month.</td></tr>` : ''}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <i class="material-icons-outlined" style="color:var(--text-secondary);">expand_more</i>
                 </div>
-                <div class="report-card-body hidden" style="padding:20px; background:rgba(255,255,255,0.01);">
-                    <div class="calendar-grid" style="margin-bottom:24px;">
-                        ${Array.from({length: daysInMonth}, (_, i) => {
-                            let d = (i + 1).toString().padStart(2, '0');
-                            let dateStr = `${d}/${month.toString().padStart(2,'0')}/${year}`;
-                            let isPresent = presentDates.includes(dateStr);
-                            let cls = isPresent ? 'present' : ( (new Date(year, month-1, i+1) <= new Date()) ? 'absent' : '' );
-                            return `<div class="day-bubble ${cls}">${i+1}</div>`;
-                        }).join('')}
-                    </div>
-                    <div class="table-responsive" style="border:none;">
-                        <table class="data-table" style="font-size:12px;">
-                            <thead>
-                                <tr style="background:transparent;"><th style="border:none;">DATE</th><th style="border:none;">IN</th><th style="border:none;">OUT</th><th style="border:none;">SHIFT</th><th style="border:none;">DUR</th></tr>
-                            </thead>
-                            <tbody>
-                                ${workerLogs.map(l => {
-                                    let isNight = l.CheckInTime && (l.CheckInTime.includes('PM') || (l.CheckInTime.includes('AM') && parseInt(l.CheckInTime.split(':')[0]) < 6));
-                                    return `<tr>
-                                        <td><b>${l.Date}</b></td>
-                                        <td>${l.CheckInTime}</td>
-                                        <td>${l.CheckOutTime || '—'}</td>
-                                        <td><i class="material-icons-outlined" style="font-size:16px; color:${isNight?'var(--accent-primary)':'var(--status-warning)'}">${isNight?'dark_mode':'light_mode'}</i></td>
-                                        <td style="color:var(--status-success); font-weight:600;">${l.TotalHours || '—'}</td>
-                                    </tr>`;
-                                }).join('') || '<tr><td colspan="5" style="text-align:center;">No entries yet.</td></tr>'}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>`;
+            `;
         });
 
-        container.innerHTML = html || `<p style="text-align:center; padding:40px;">No workers found.</p>`;
+        container.innerHTML = htmlContent;
 
-    } catch (e) {
-        container.innerHTML = `<p style="text-align:center; color:var(--status-error); padding:40px;">Error: ${e.message}</p>`;
-    }
+    }).catch(err => {
+        console.error("Overview Load Error:", err);
+        container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--status-error);"><i class="material-icons-outlined" style="font-size:48px;">error_outline</i><p>${err.message}</p></div>`;
+    });
 };
+
+// Helper for Fetching using apiCall with Promise
+function apiCallPromise(action, data) {
+    return new Promise((resolve, reject) => {
+        apiCall(action, data, (res) => resolve(res), (err) => reject(new Error(err)), true);
+    });
+}
+
 
 
 
