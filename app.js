@@ -619,11 +619,13 @@ window.handleAttendanceAction = function (actionType) {
                     processAttendanceAPI(actionType, position.coords.latitude, position.coords.longitude);
                 },
                 function (error) {
+                    let errMsg = error.message || "Unknown error";
                     if (requireGps) {
                         Loader.hide();
-                        Toast.show("Location access required for Check-In/Out.", "error");
+                        Toast.show("Location blocked: " + errMsg, "error");
                     } else {
                         // User denied or error, but not required, so proceed without GPS
+                        Toast.show("GPS disabled (" + errMsg + "), logging without location.", "warning");
                         processAttendanceAPI(actionType, "", "");
                     }
                 },
@@ -634,6 +636,7 @@ window.handleAttendanceAction = function (actionType) {
                 Loader.hide();
                 Toast.show("Geolocation is not supported by this browser.", "error");
             } else {
+                Toast.show("GPS not supported, logging without location.", "warning");
                 processAttendanceAPI(actionType, "", "");
             }
         }
@@ -702,7 +705,7 @@ function processAttendanceAPI(actionType, lat, lng) {
             }
         }
         
-        // Let's pass the calculated duration just in case
+        // TotalHours should be accurate to what user saw.
         payload.calculatedDuration = calculateCurrentDurationString();
         payload.outOfRangeCount = localStorage.getItem('att_outOfRangeCount') || 0;
 
@@ -819,40 +822,65 @@ function refreshActiveTableRow() {
 function loadAttendanceUI(state) {
     const statusEl = document.getElementById('shift-status');
     const tbody = document.getElementById('attendance-tbody');
-    
+    if(!statusEl || !tbody) return;
+
     if (state === 'active') {
-        if (statusEl) { statusEl.innerText = "Checked In — Active"; statusEl.style.color = "var(--status-success)"; }
+        statusEl.innerText = "Checked In — Active"; statusEl.style.color = "var(--status-success)";
     } else if (state === 'paused') {
-        if (statusEl) { statusEl.innerText = "Shift Paused"; statusEl.style.color = "var(--status-warning)"; }
+        statusEl.innerText = "Shift Paused"; statusEl.style.color = "var(--status-warning)";
     } else {
-        if (statusEl) { statusEl.innerText = "Ready for Shift"; statusEl.style.color = "var(--text-secondary)"; }
+        statusEl.innerText = "Ready for Shift"; statusEl.style.color = "var(--text-secondary)";
     }
 
-    if (tbody && state !== 'not_started') {
-        // Appending a dummy log simulation matching glass theme UI, but assigning IDs for real-time tick
-        let startObj = new Date(parseInt(localStorage.getItem('att_checkInTime') || new Date().getTime()));
-        tbody.innerHTML = `
-        <tr style="border-bottom: 1px solid var(--border-color);">
-            <td style="padding: 16px;">1</td>
-            <td style="padding: 16px;">
-                <div style="display:flex; align-items:center; gap:12px;">
-                    <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:bold;">${currentUser.name.charAt(0).toUpperCase()}</div>
-                    <span style="font-weight:600;">${currentUser.name}</span>
-                </div>
-            </td>
-            <td style="padding: 16px;">${startObj.toLocaleTimeString('en-US', {hour12:false})}</td>
-            <td style="padding: 16px; color:var(--text-secondary);">—</td>
-            <td style="padding: 16px; font-family:monospace; font-size:16px;" id="dyn-duration">00:00:00</td>
-            <td style="padding: 16px;">
-                 <span style="color:var(--status-error); font-weight:600; font-size:12px; display:flex; align-items:center; gap:4px;"><i class="material-icons-outlined" style="font-size:14px;">warning</i> <span id="dyn-oor">0</span> times out</span>
-            </td>
-            <td style="padding: 16px;">
-                <div class="badge active" id="dyn-badge"><i class="material-icons-outlined" style="font-size:14px;">check</i> In Range</div>
-            </td>
-        </tr>`;
-    } else if (tbody && state === 'not_started') {
-        tbody.innerHTML = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Your daily shift has ended.</td></tr>`;
-    }
+    // Fetch Today's Logs from Server to populate table
+    const today = new Date().toLocaleDateString();
+    let logPayload = { date: today };
+    if (currentUser.role === 'Worker') logPayload.workerId = currentUser.id;
+
+    apiCall('getAttendanceLogs', logPayload, function(logs) {
+        let html = '';
+        if (!logs || logs.length === 0) {
+            if (state === 'not_started') {
+                 html = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Your daily shift has ended or not started.</td></tr>`;
+            } else {
+                 html = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">No logs yet today.</td></tr>`;
+            }
+        } else {
+            logs.forEach((log, index) => {
+                let dur = log.TotalHours;
+                let oor = log.OutOfRangeCount || 0;
+                let statusBadge = log.CheckOutTime ? '<div class="badge neutral">Completed</div>' : '<div class="badge active" id="dyn-badge"><i class="material-icons-outlined" style="font-size:14px;">check</i> In Range</div>';
+                
+                // If it's the current running record, give it IDs for live ticking
+                let isLive = (log.ID === localStorage.getItem('att_recordId'));
+                let durId = isLive ? 'id="dyn-duration"' : '';
+                let oorId = isLive ? 'id="dyn-oor"' : '';
+                let badgeId = isLive ? 'id="dyn-badge"' : '';
+
+                html += `
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td style="padding: 16px;">${index + 1}</td>
+                    <td style="padding: 16px;">
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:bold;">${currentUser.name.charAt(0).toUpperCase()}</div>
+                            <span style="font-weight:600;">${currentUser.name}</span>
+                        </div>
+                    </td>
+                    <td style="padding: 16px;">${log.CheckInTime}</td>
+                    <td style="padding: 16px; color:var(--text-secondary);">${log.CheckOutTime || '—'}</td>
+                    <td style="padding: 16px; font-family:monospace; font-size:16px;" ${durId}>${dur === '-' ? '00:00:00' : dur}</td>
+                    <td style="padding: 16px;">
+                         <span style="color:var(--status-error); font-weight:600; font-size:12px; display:flex; align-items:center; gap:4px;"><i class="material-icons-outlined" style="font-size:14px;">warning</i> <span ${oorId}>${oor}</span> times out</span>
+                    </td>
+                    <td style="padding: 16px;">
+                        ${statusBadge}
+                    </td>
+                </tr>`;
+            });
+        }
+        tbody.innerHTML = html;
+        if (state !== 'not_started') refreshActiveTableRow();
+    }, null, true); // Silent load because it's refreshing UI
 }
 
 /* =========================================================================
@@ -1130,12 +1158,133 @@ window.app_saveSettings = function (e) {
     });
 };
 
-function loadAttendanceUI(state, timeText) {
-    const statusText = document.getElementById('att-status-text');
-    if (state === 'active') {
-        if (statusText) statusText.innerHTML = `Checked In at <b>${timeText}</b>. Working...`;
-    } else {
-        if (statusText) statusText.innerHTML = `Not Checked In`;
+/* =========================================================================
+   REPORTS / MONTHLY CALENDAR LOGIC
+========================================================================= */
+window.openMonthlyReport = function() {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    let html = `
+    <div style="padding: 10px;">
+        <div style="display:flex; gap:12px; margin-bottom:20px; align-items:center;">
+             <select id="rep-month" class="form-input" style="width:140px;">
+                ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m,i) => `<option value="${i+1}" ${i+1===currentMonth?'selected':''}>${m}</option>`).join('')}
+             </select>
+             <select id="rep-year" class="form-input" style="width:100px;">
+                ${[2024,2025,2026].map(y => `<option value="${y}" ${y===currentYear?'selected':''}>${y}</option>`).join('')}
+             </select>
+             <button class="btn-primary" onclick="renderMonthlyData()" style="width:auto; padding:10px 20px;">View Report</button>
+        </div>
+        <div id="report-results" style="min-height:200px; max-height:60vh; overflow-y:auto;">
+             <p style="text-align:center; color:var(--text-secondary); margin-top:40px;">Click View Report to load data.</p>
+        </div>
+    </div>`;
+
+    Modal.open("Monthly Attendance Report", html);
+    // Auto-trigger first load
+    setTimeout(renderMonthlyData, 300);
+};
+
+window.renderMonthlyData = async function() {
+    const month = document.getElementById('rep-month').value;
+    const year = document.getElementById('rep-year').value;
+    const results = document.getElementById('report-results');
+    
+    results.innerHTML = `<div style="text-align:center; padding:40px;"><div class="spinner" style="margin:0 auto;"></div><p>Fetching logs...</p></div>`;
+
+    try {
+        const workersRes = await fetch(APPS_SCRIPT_WEB_APP_URL, { 
+            method: 'POST', body: JSON.stringify({ action: 'getWorkers', data: {} }), headers: { 'Content-Type': 'text/plain' } 
+        }).then(r => r.json());
+        
+        const logsRes = await fetch(APPS_SCRIPT_WEB_APP_URL, { 
+            method: 'POST', body: JSON.stringify({ action: 'getAttendanceLogs', data: { month: month.padStart(2,'0'), year: year } }), headers: { 'Content-Type': 'text/plain' } 
+        }).then(r => r.json());
+
+        const workers = (workersRes.data || []).filter(w => w.Status === 'Active');
+        const logs = logsRes.data || [];
+        
+        let displayWorkers = (currentUser.role === 'Worker') ? workers.filter(w => w.ID === currentUser.id) : workers;
+
+        if (displayWorkers.length === 0) {
+            results.innerHTML = `<p style="text-align:center; color:var(--text-secondary); margin-top:40px;">No workers found.</p>`;
+            return;
+        }
+
+        let reportHTML = '';
+        const daysInMonth = new Date(year, month, 0).getDate();
+
+        displayWorkers.forEach(worker => {
+            const workerLogs = logs.filter(l => l.WorkerID === worker.ID);
+            
+            let presentDates = [...new Set(workerLogs.map(l => l.Date))];
+            let presentCount = presentDates.length;
+            
+            let dayShifts = 0;
+            let nightShifts = 0;
+            workerLogs.forEach(l => {
+                if (!l.CheckInTime) return;
+                let isNight = l.CheckInTime.includes('PM') || (l.CheckInTime.includes('AM') && parseInt(l.CheckInTime.split(':')[0]) < 6);
+                if (isNight) nightShifts++; else dayShifts++;
+            });
+
+            let absentCount = daysInMonth - presentCount;
+            if (parseInt(year) === new Date().getFullYear() && parseInt(month) === (new Date().getMonth()+1)) {
+                let todayDay = new Date().getDate();
+                absentCount = todayDay - presentCount;
+                if (absentCount < 0) absentCount = 0;
+            }
+
+            reportHTML += `
+            <div class="report-card" style="margin-bottom:12px;">
+                <div class="report-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')" style="padding:12px 16px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-weight:600; font-size:14px;">${worker.Name}</span>
+                        <i class="material-icons-outlined" style="font-size:16px;">expand_more</i>
+                    </div>
+                    <div class="summary-stats" style="margin-bottom:0; gap:12px;">
+                        <div class="stat-item"><span class="val val-p" style="font-size:12px;">${presentCount}</span><span class="lbl" style="font-size:7px;">P</span></div>
+                        <div class="stat-item"><span class="val val-a" style="font-size:12px;">${absentCount}</span><span class="lbl" style="font-size:7px;">A</span></div>
+                        <div class="stat-item"><span class="val val-d" style="font-size:12px;">${dayShifts}</span><span class="lbl" style="font-size:7px;">D</span></div>
+                        <div class="stat-item"><span class="val val-n" style="font-size:12px;">${nightShifts}</span><span class="lbl" style="font-size:7px;">N</span></div>
+                    </div>
+                </div>
+                <div class="report-card-body hidden" style="padding:12px;">
+                    <div class="calendar-grid">
+                        ${Array.from({length: daysInMonth}, (_, i) => {
+                            let d = (i + 1).toString().padStart(2, '0');
+                            let dateStr = `${d}/${month.toString().padStart(2,'0')}/${year}`;
+                            let isPresent = presentDates.includes(dateStr);
+                            let cls = isPresent ? 'present' : ( (new Date(year, month-1, i+1) <= new Date()) ? 'absent' : '' );
+                            return `<div class="day-bubble ${cls}" style="width:24px; height:24px; font-size:10px;">${i+1}</div>`;
+                        }).join('')}
+                    </div>
+                    <div class="table-responsive" style="border:none;">
+                        <table class="data-table" style="font-size:10px;">
+                            <thead><tr><th>DATE</th><th>IN</th><th>OUT</th><th>SHIFT</th><th>DUR</th></tr></thead>
+                            <tbody>
+                                ${workerLogs.map(l => {
+                                    let isNight = l.CheckInTime && (l.CheckInTime.includes('PM') || (l.CheckInTime.includes('AM') && parseInt(l.CheckInTime.split(':')[0]) < 6));
+                                    return `<tr>
+                                        <td>${l.Date}</td>
+                                        <td>${l.CheckInTime}</td>
+                                        <td>${l.CheckOutTime || '—'}</td>
+                                        <td><i class="material-icons-outlined" style="font-size:12px;">${isNight?'dark_mode':'light_mode'}</i></td>
+                                        <td style="color:var(--status-success); font-weight:600;">${l.TotalHours || '—'}</td>
+                                    </tr>`;
+                                }).join('') || '<tr><td colspan="5" style="text-align:center;">No data</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>`;
+        });
+        results.innerHTML = reportHTML;
+    } catch (e) {
+        results.innerHTML = `<p style="text-align:center; color:var(--status-error);">Error: ${e.message}</p>`;
     }
-}
+};
+
 
