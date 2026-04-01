@@ -302,6 +302,7 @@ async function syncAppData(silent = false) {
         if (activeView === 'attendance') {
             loadAttendanceUI(localStorage.getItem('att_shiftState') || 'not_started');
             loadAttendanceOverview();
+            updateTodaySummary();
             if (currentUser.role === 'Admin' || currentUser.role === 'Manager') updateAdminRadar();
         }
     }
@@ -638,6 +639,7 @@ window.init_attendance = function () {
     
     // 1. UI Updates
     updateAttendanceButtons(currentState);
+    updateTodaySummary();
     
     // 2. Set default month/year for overview 
     const now = new Date();
@@ -729,11 +731,42 @@ window.updateAdminRadar = function() {
     });
 
     radarContainer.innerHTML = html;
+    
+    // Update "Outside" stat in the UI too
+    const outsideCount = activeSessions.filter(s => {
+        let dist = getDistanceFromLatLonInM(officeLat, officeLng, parseFloat(s.CheckInLat), parseFloat(s.CheckInLong));
+        return dist > allowedRadius;
+    }).length;
+    const statOutside = document.getElementById('stat-outside');
+    if (statOutside) statOutside.innerText = outsideCount;
+};
+
+window.updateTodaySummary = function() {
+    const today = getTodayStr();
+    const logs = window.AppData.logs || [];
+    const leaves = window.AppData.leaves || [];
+    const workers = window.AppData.workers || [];
+
+    const activeWorkers = workers.filter(w => w.Status === 'Active');
+    const presentToday = [...new Set(logs.filter(l => l.Date === today).map(l => l.WorkerID))];
+    const onLeaveToday = [...new Set(leaves.filter(lv => lv.Date === today && lv.Status === 'Approved').map(lv => lv.WorkerID))];
+    
+    const absentCount = activeWorkers.length - (presentToday.length + onLeaveToday.length);
+    
+    const sPresent = document.getElementById('stat-present');
+    const sAbsent = document.getElementById('stat-absent');
+    const sLeave = document.getElementById('stat-leave');
+    
+    if (sPresent) sPresent.innerText = presentToday.length;
+    if (sAbsent) sAbsent.innerText = Math.max(0, absentCount);
+    if (sLeave) sLeave.innerText = onLeaveToday.length;
 };
 
 function checkTodayShiftExists() {
-    const today = getTodayStr();
-    const myLogs = window.AppData.logs.filter(l => l.WorkerID === currentUser.id && l.Date === today);
+    const today = getTodayStr(); // Force DD/MM/YYYY
+    const myLogs = (window.AppData.logs || []).filter(function(l) { 
+        return l.WorkerID === currentUser.id && l.Date === today; 
+    });
     const btnIn = document.getElementById('btn-checkin');
     if (!btnIn) return;
     
@@ -1460,15 +1493,27 @@ window.loadAttendanceOverview = function() {
     // Filter logs for selected month/year
     const filteredLogs = logs.filter(l => {
         if (!l.Date) return false;
-        const parts = l.Date.split("/");
-        return parseInt(parts[1]) === month && parseInt(parts[2]) === year;
+        // Robust split: handles DD/MM/YYYY or D/M/YYYY
+        const parts = l.Date.split(/[\/\-]/);
+        if (parts.length < 3) return false;
+        
+        let d = parseInt(parts[0]), m = parseInt(parts[1]), y = parseInt(parts[2]);
+        // Handle short years like '26' -> 2026
+        if (y < 100) y += 2000;
+        
+        return m === month && y === year;
     });
 
     // Filter approved leaves for selected month/year
     const filteredLeaves = leaves.filter(lv => {
         if (!lv.Date) return false;
-        const parts = lv.Date.split("/");
-        return parseInt(parts[1]) === month && parseInt(parts[2]) === year && lv.Status === 'Approved';
+        const parts = lv.Date.split(/[\/\-]/);
+        if (parts.length < 3) return false;
+        
+        let d = parseInt(parts[0]), m = parseInt(parts[1]), y = parseInt(parts[2]);
+        if (y < 100) y += 2000;
+        
+        return m === month && y === year && lv.Status === 'Approved';
     });
 
     // Determine which workers to show
