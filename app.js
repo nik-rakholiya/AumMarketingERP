@@ -125,6 +125,24 @@ const AuthManager = {
         const d = new Date();
         return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
     };
+
+    // Robust Date Normalizer (Handles strings and Date objects from Sheet)
+    window.formatSheetDate = function(val) {
+        if (!val) return "";
+        let d = (val instanceof Date) ? val : new Date(val);
+        if (isNaN(d.getTime())) {
+            // Fallback for strings like DD/MM/YYYY that JS ctor might fail on in some locales
+            if (typeof val === 'string' && val.includes('/')) {
+                let parts = val.split(/[\/-]/);
+                if (parts.length === 3) {
+                    // Assume DD/MM/YYYY
+                    return `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2].length === 2 ? '20'+parts[2] : parts[2]}`;
+                }
+            }
+            return String(val);
+        }
+        return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+    };
         // 1. Initial Data Sync (Parallel Load)
         syncAppData().then(() => {
              // 2. Load default view after data is ready
@@ -704,9 +722,11 @@ window.updateAdminRadar = function() {
     const officeLng = parseFloat(window.AppConfig.OfficeLng);
     const allowedRadius = parseInt(window.AppConfig.GeoFenceRadius || 200);
 
-    const activeSessions = logs.filter(l => l.Date === todayStr && l.CheckInTime && !l.CheckOutTime);
+    // Filter for Active Shifts TODAY
+    const activeSessions = logs.filter(l => formatSheetDate(l.Date) === todayStr && l.CheckInTime && !l.CheckOutTime);
 
     let html = '';
+    let inRangeCount = 0;
     activeSessions.forEach(log => {
         const lat = parseFloat(log.CheckInLat);
         const lng = parseFloat(log.CheckInLong);
@@ -716,6 +736,9 @@ window.updateAdminRadar = function() {
         const name = worker ? worker.Name : "Unknown";
         
         const dist = getDistanceFromLatLonInM(officeLat, officeLng, lat, lng);
+        const inRange = dist <= allowedRadius;
+        if (inRange) inRangeCount++;
+
         const angle = (dist * 7) % 360; 
         const maxRadiusPx = 110; 
         const distPx = Math.min((dist / allowedRadius) * 60, maxRadiusPx); 
@@ -726,13 +749,20 @@ window.updateAdminRadar = function() {
         html += `
             <div class="radar-dot" 
                  style="left:${x}px; top:${y}px; transform: translate(-50%, -50%);" 
-                 title="${name}\nDistance: ${Math.round(dist)}m\nStatus: In Range">
+                 title="${name}\nDistance: ${Math.round(dist)}m\nStatus: ${inRange ? 'In Range' : 'Out of Range'}">
                 ${name.charAt(0)}
             </div>
         `;
     });
 
     radarContainer.innerHTML = html;
+    
+    // Update "X / Y In Range" Badge
+    const badge = document.getElementById('radar-stats-badge');
+    if (badge) {
+        badge.innerText = `${inRangeCount} / ${activeSessions.length} In Range`;
+        badge.className = inRangeCount < activeSessions.length ? "badge warning" : "badge active";
+    }
     
     // Update "Outside" stat in the UI too
     const outsideCount = activeSessions.filter(s => {
@@ -1160,7 +1190,7 @@ function loadAttendanceUI(state) {
     let logs = window.AppData.logs || [];
     
     // Filter for TODAY and current Worker if restricted
-    let filteredLogs = logs.filter(l => l.Date === todayStr);
+    let filteredLogs = logs.filter(l => formatSheetDate(l.Date) === todayStr);
     if (currentUser.role === 'Worker') {
         filteredLogs = filteredLogs.filter(l => l.WorkerID === currentUser.id);
     }
@@ -1499,28 +1529,18 @@ window.loadAttendanceOverview = function() {
 
     // Filter logs for selected month/year
     const filteredLogs = logs.filter(l => {
-        if (!l.Date) return false;
-        // Robust split: handles DD/MM/YYYY or D/M/YYYY
-        const parts = l.Date.split(/[\/\-]/);
-        if (parts.length < 3) return false;
-        
-        let d = parseInt(parts[0]), m = parseInt(parts[1]), y = parseInt(parts[2]);
-        // Handle short years like '26' -> 2026
-        if (y < 100) y += 2000;
-        
-        return m === month && y === year;
+        const dStr = formatSheetDate(l.Date);
+        if (!dStr) return false;
+        const parts = dStr.split("/");
+        return parseInt(parts[1]) === month && parseInt(parts[2]) === year;
     });
 
     // Filter approved leaves for selected month/year
     const filteredLeaves = leaves.filter(lv => {
-        if (!lv.Date) return false;
-        const parts = lv.Date.split(/[\/\-]/);
-        if (parts.length < 3) return false;
-        
-        let d = parseInt(parts[0]), m = parseInt(parts[1]), y = parseInt(parts[2]);
-        if (y < 100) y += 2000;
-        
-        return m === month && y === year && lv.Status === 'Approved';
+        const dStr = formatSheetDate(lv.Date);
+        if (!dStr) return false;
+        const parts = dStr.split("/");
+        return parseInt(parts[1]) === month && parseInt(parts[2]) === year && lv.Status === 'Approved';
     });
 
     // Determine which workers to show
