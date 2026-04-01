@@ -749,15 +749,14 @@ window.updateAdminRadar = function() {
         const angle = (dist * 7) % 360; 
         const maxRadarRadius = 115; // Inner radius is 120 (half of 240)
         
-        // VISUAL IMPROVEMENT: 
-        // If In Range: Scale distance within 0 - 60px (Inner Circle)
-        // If Out Range: Scale distance within 70 - 110px (Outside Circle)
+        // If In Range: Scale distance within 0 - 60px (Inner Circle is 120px wide)
+        // If Out Range: Scale distance within 75 - 110px (Between rings)
         let distPx;
         if (inRange) {
-            distPx = (dist / allowedRadius) * 55; // Inner 0-55px
+            distPx = Math.max(15, (dist / allowedRadius) * 45); // Inner 15-45px (prevents overlapping center icon)
         } else {
-            // Scale between 75px (Outside of inner ring) and 110px (Edge)
-            distPx = 75 + Math.min((dist / (allowedRadius * 5)) * 35, 35); 
+            // Scale between 75px (Outside of inner ring) and 105px (Edge)
+            distPx = 75 + Math.min((dist / (allowedRadius * 5)) * 30, 30); 
         }
         
         const x = 120 + distPx * Math.cos(angle * Math.PI / 180);
