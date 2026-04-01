@@ -698,6 +698,7 @@ window.init_attendance = function () {
     const updateClock = () => {
         const timeEl = document.getElementById('clock-time');
         const dateEl = document.getElementById('clock-date');
+        const subtextEl = document.getElementById('shift-status-subtext');
         if (!timeEl || !dateEl) return;
         
         const tickNow = new Date();
@@ -705,9 +706,20 @@ window.init_attendance = function () {
         dateEl.innerText = tickNow.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         
         if (tickState !== 'not_started') {
-            timeEl.innerText = calculateCurrentDurationString();
+            const hms = calculateCurrentDurationString();
+            timeEl.innerText = hms;
+            if (subtextEl) {
+                 subtextEl.innerHTML = `<span style="width:8px; height:8px; background:var(--status-success); border-radius:50%; animation:pulse 2s infinite;"></span> ${tickState === 'active' ? 'Active' : 'Paused'} — ${hms}`;
+                 subtextEl.style.color = tickState === 'active' ? 'var(--status-success)' : 'var(--status-info)';
+                 subtextEl.style.background = tickState === 'active' ? 'rgba(0,230,118,0.1)' : 'rgba(0,191,255,0.1)';
+            }
         } else {
-            timeEl.innerText = "00:00:00";
+            timeEl.innerText = tickNow.toLocaleTimeString('en-GB', { hour12: false });
+            if (subtextEl) {
+                subtextEl.innerHTML = `<span style="width:8px; height:8px; background:var(--text-disabled); border-radius:50%;"></span> Not Started`;
+                subtextEl.style.color = 'var(--text-secondary)';
+                subtextEl.style.background = 'rgba(255,255,255,0.05)';
+            }
         }
     };
     clockInterval = setInterval(updateClock, 1000);
@@ -719,6 +731,7 @@ window.init_attendance = function () {
 
 window.updateAdminRadar = function() {
     const radarContainer = document.getElementById('radar-dots-container');
+    const meterLabel = document.getElementById('radar-meter-label');
     if (!radarContainer || !window.AppData) return;
 
     const todayStr = getTodayStr();
@@ -728,6 +741,8 @@ window.updateAdminRadar = function() {
     const officeLat = parseFloat(window.AppConfig.OfficeLat);
     const officeLng = parseFloat(window.AppConfig.OfficeLng);
     const allowedRadius = parseInt(window.AppConfig.GeoFenceRadius || 200);
+
+    if (meterLabel) meterLabel.innerText = allowedRadius + 'm';
 
     // Filter for Active Shifts TODAY
     const activeSessions = logs.filter(l => formatSheetDate(l.Date) === todayStr && l.CheckInTime && !l.CheckOutTime);
@@ -747,25 +762,21 @@ window.updateAdminRadar = function() {
         if (inRange) inRangeCount++;
 
         const angle = (dist * 7) % 360; 
-        const maxRadarRadius = 115; // Inner radius is 120 (half of 240)
         
-        // If In Range: Scale distance within 0 - 60px (Inner Circle is 120px wide)
-        // If Out Range: Scale distance within 75 - 110px (Between rings)
         let distPx;
         if (inRange) {
-            distPx = Math.max(15, (dist / allowedRadius) * 45); // Inner 15-45px (prevents overlapping center icon)
+            distPx = Math.max(15, (dist / allowedRadius) * 45); 
         } else {
-            // Scale between 75px (Outside of inner ring) and 105px (Edge)
             distPx = 75 + Math.min((dist / (allowedRadius * 5)) * 30, 30); 
         }
         
-        const x = 120 + distPx * Math.cos(angle * Math.PI / 180);
-        const y = 120 + distPx * Math.sin(angle * Math.PI / 180);
+        const x = 110 + distPx * Math.cos(angle * Math.PI / 180);
+        const y = 110 + distPx * Math.sin(angle * Math.PI / 180);
 
         html += `
             <div class="radar-dot ${inRange ? 'in-range' : 'out-range'}" 
-                 style="left:${x}px; top:${y}px; transform: translate(-50%, -50%);" 
-                 title="${name}\nDist: ${Math.round(dist)}m\nStatus: ${inRange ? 'Inside' : 'Outside'}">
+                 style="left:${x}px; top:${y}px; transform: translate(-50%, -50%); border-radius:50%;" 
+                 title="${name}\nDist: ${Math.round(dist)}m">
                 ${name.charAt(0)}
             </div>
         `;
@@ -773,20 +784,12 @@ window.updateAdminRadar = function() {
 
     radarContainer.innerHTML = html;
     
-    // Update "X / Y In Range" Badge
     const badge = document.getElementById('radar-stats-badge');
     if (badge) {
         badge.innerText = `${inRangeCount} / ${activeSessions.length} In Range`;
-        badge.className = inRangeCount < activeSessions.length ? "badge warning" : "badge active";
+        badge.style.background = inRangeCount < activeSessions.length ? "rgba(255,171,0,0.1)" : "rgba(0,230,118,0.1)";
+        badge.style.color = inRangeCount < activeSessions.length ? "var(--status-warning)" : "var(--status-success)";
     }
-    
-    // Update "Outside" stat in the UI too
-    const outsideCount = activeSessions.filter(s => {
-        let dist = getDistanceFromLatLonInM(officeLat, officeLng, parseFloat(s.CheckInLat), parseFloat(s.CheckInLong));
-        return dist > allowedRadius;
-    }).length;
-    const statOutside = document.getElementById('stat-outside');
-    if (statOutside) statOutside.innerText = outsideCount;
 };
 
 window.updateTodaySummary = function() {
@@ -1226,6 +1229,57 @@ function loadAttendanceUI(state) {
         filteredLogs = filteredLogs.filter(l => l.WorkerID === currentUser.id);
     }
 
+    window.loadAttendanceOverview = function () {
+    const tbody = document.getElementById('attendance-overview-tbody');
+    const titleEl = document.getElementById('attendance-log-title');
+    if (!tbody || !window.AppData) return;
+
+    const logs = window.AppData.logs || [];
+    const workers = window.AppData.workers || [];
+    const month = parseInt(document.getElementById('ov-month').value);
+    const year = parseInt(document.getElementById('ov-year').value);
+
+    // Update Title with Month Name
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    if (titleEl) titleEl.innerHTML = `<i class="material-icons-outlined" style="vertical-align:middle; margin-right:8px; color:var(--accent-primary);">assignment</i> Attendance Log — ${monthNames[month-1]} ${year}`;
+
+    // Filter logs for selected month/year
+    const filteredLogs = logs.filter(l => {
+        const dStr = formatSheetDate(l.Date);
+        if (!dStr) return false;
+        const parts = dStr.split("/");
+        return parseInt(parts[1]) === month && parseInt(parts[2]) === year;
+    }).sort((a, b) => new Date(b.Date) - new Date(a.Date)); // Newest first
+
+    if (filteredLogs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">No records found for this period.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filteredLogs.map((log, index) => {
+        const worker = workers.find(w => w.ID === log.WorkerID) || { Name: 'Unknown' };
+        const statusClass = log.CheckOutTime ? 'badge neutral' : 'badge active';
+        const statusText = log.CheckOutTime ? 'Completed' : 'Running';
+
+        return `
+            <tr>
+                <td style="padding:16px 24px; color:var(--text-secondary);">${index + 1}</td>
+                <td style="padding:16px 24px;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px;">${worker.Name.charAt(0)}</div>
+                        <div style="font-weight:600;">${worker.Name}</div>
+                    </div>
+                </td>
+                <td style="padding:16px 24px;">${log.Date}</td>
+                <td style="padding:16px 24px; color:var(--status-success); font-weight:500;">${formatTime12h(log.CheckInTime)}</td>
+                <td style="padding:16px 24px; color:var(--status-error); font-weight:500;">${log.CheckOutTime ? formatTime12h(log.CheckOutTime) : '—'}</td>
+                <td style="padding:16px 24px; font-family:monospace; font-weight:600; font-size:14px;">${log.TotalHours || '00:00:00'}</td>
+                <td style="padding:16px 24px;"><span class="${statusClass}">${statusText}</span></td>
+            </tr>
+        `;
+    }).join('');
+};
+    
     let html = '';
     if (filteredLogs.length === 0) {
         if (state === 'not_started') {
@@ -1271,7 +1325,6 @@ function loadAttendanceUI(state) {
 
 /* =========================================================================
    JOB WORK MODULE LOGIC
-========================================================================= */
 let currentJobTab = 'active'; // 'active' or 'settled'
 
 window.loadJobWork = function () {
