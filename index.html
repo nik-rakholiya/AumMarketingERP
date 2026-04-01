@@ -631,11 +631,16 @@
                     </div>
                     <div class="form-group" style="display:flex; gap:12px;">
                         <div style="flex:1;">
-                            <label class="form-label">Office Latitude (e.g. 22.3039)</label>
+                            <label class="form-label" style="display:flex; justify-content:space-between;">
+                                Office Latitude 
+                                <button type="button" class="btn-secondary" style="font-size:10px; padding:2px 8px; border-radius:4px;" onclick="detectOfficeLocation()">
+                                    <i class="material-icons-outlined" style="font-size:12px; vertical-align:middle;">my_location</i> Detect
+                                </button>
+                            </label>
                             <input type="text" id="set-lat" class="form-input" placeholder="Latitude">
                         </div>
                         <div style="flex:1;">
-                            <label class="form-label">Office Longitude (e.g. 70.8022)</label>
+                            <label class="form-label">Office Longitude</label>
                             <input type="text" id="set-lng" class="form-input" placeholder="Longitude">
                         </div>
                     </div>

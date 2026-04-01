@@ -747,8 +747,18 @@ window.updateAdminRadar = function() {
         if (inRange) inRangeCount++;
 
         const angle = (dist * 7) % 360; 
-        const maxRadiusPx = 110; 
-        const distPx = Math.min((dist / allowedRadius) * 60, maxRadiusPx); 
+        const maxRadarRadius = 115; // Inner radius is 120 (half of 240)
+        
+        // VISUAL IMPROVEMENT: 
+        // If In Range: Scale distance within 0 - 60px (Inner Circle)
+        // If Out Range: Scale distance within 70 - 110px (Outside Circle)
+        let distPx;
+        if (inRange) {
+            distPx = (dist / allowedRadius) * 55; // Inner 0-55px
+        } else {
+            // Scale between 75px (Outside of inner ring) and 110px (Edge)
+            distPx = 75 + Math.min((dist / (allowedRadius * 5)) * 35, 35); 
+        }
         
         const x = 120 + distPx * Math.cos(angle * Math.PI / 180);
         const y = 120 + distPx * Math.sin(angle * Math.PI / 180);
@@ -756,7 +766,7 @@ window.updateAdminRadar = function() {
         html += `
             <div class="radar-dot ${inRange ? 'in-range' : 'out-range'}" 
                  style="left:${x}px; top:${y}px; transform: translate(-50%, -50%);" 
-                 title="${name}\nDistance: ${Math.round(dist)}m\nStatus: ${inRange ? 'In Range' : 'Out of Range'}">
+                 title="${name}\nDist: ${Math.round(dist)}m\nStatus: ${inRange ? 'Inside' : 'Outside'}">
                 ${name.charAt(0)}
             </div>
         `;
@@ -1673,6 +1683,55 @@ function toggleDetailedLogs(workerId) {
     const el = document.getElementById('details-' + workerId);
     if (el) el.classList.toggle('hidden');
 }
+
+window.init_settings = function() {
+    if (currentUser.role !== 'Admin' && currentUser.role !== 'Manager') return;
+    
+    const config = window.AppConfig || {};
+    const gpsReqEl = document.getElementById('set-gps-req');
+    const latEl = document.getElementById('set-lat');
+    const lngEl = document.getElementById('set-lng');
+    const radiusEl = document.getElementById('set-radius');
+    
+    if (gpsReqEl) gpsReqEl.checked = (config.GeoLocationRequired === 'true');
+    if (latEl) latEl.value = config.OfficeLat || "";
+    if (lngEl) lngEl.value = config.OfficeLng || "";
+    if (radiusEl) {
+        radiusEl.value = config.GeoFenceRadius || 200;
+        if (window.updateRadiusVisualizer) window.updateRadiusVisualizer(radiusEl.value);
+    }
+};
+
+window.detectOfficeLocation = function() {
+    if (navigator.geolocation) {
+        Toast.show("Detecting current GPS...", "info");
+        navigator.geolocation.getCurrentPosition(function(pos) {
+            document.getElementById('set-lat').value = pos.coords.latitude.toFixed(6);
+            document.getElementById('set-lng').value = pos.coords.longitude.toFixed(6);
+            Toast.show("Location coordinates captured!", "success");
+        }, function(err) {
+            Toast.show("Failed to get location: " + err.message, "error");
+        });
+    } else {
+        Toast.show("Geolocation not supported", "error");
+    }
+};
+
+window.app_saveSettings = function(e) {
+    e.preventDefault();
+    const payload = {
+        GeoLocationRequired: document.getElementById('set-gps-req').checked ? 'true' : 'false',
+        OfficeLat: document.getElementById('set-lat').value,
+        OfficeLng: document.getElementById('set-lng').value,
+        GeoFenceRadius: document.getElementById('set-radius').value
+    };
+    
+    apiCall('updateGlobalConfig', payload, function(res) {
+        Toast.show("Settings Updated Successfully!", "success");
+        // Refetch config so changes are immediate
+        syncAppData(true);
+    });
+};
 
 
 
