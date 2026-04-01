@@ -120,6 +120,11 @@ const AuthManager = {
         document.getElementById('user-role').innerText = currentUser.role;
         document.getElementById('user-avatar').innerText = currentUser.name.charAt(0).toUpperCase();
 
+        // Standardized Date Format: DD/MM/YYYY
+    window.getTodayStr = function() {
+        const d = new Date();
+        return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+    };
         // 1. Initial Data Sync (Parallel Load)
         syncAppData().then(() => {
              // 2. Load default view after data is ready
@@ -293,6 +298,12 @@ async function syncAppData(silent = false) {
         console.error("Sync Error:", err);
     } finally {
         if (!silent) Loader.hide();
+        // Refresh Current View UI if data changed
+        if (activeView === 'attendance') {
+            loadAttendanceUI(localStorage.getItem('att_shiftState') || 'not_started');
+            loadAttendanceOverview();
+            if (currentUser.role === 'Admin' || currentUser.role === 'Manager') updateAdminRadar();
+        }
     }
 }
 
@@ -625,17 +636,18 @@ window.init_attendance = function () {
     if (!currentUser) return;
     const currentState = localStorage.getItem('att_shiftState') || 'not_started';
     
-    // Initial UI Updates
+    // 1. UI Updates
     updateAttendanceButtons(currentState);
     
-    // 2. Set default month/year for overview based on current date
+    // 2. Set default month/year for overview 
     const now = new Date();
     const ovMonth = document.getElementById('ov-month');
     const ovYear = document.getElementById('ov-year');
     if (ovMonth) ovMonth.value = now.getMonth() + 1;
     if (ovYear) ovYear.value = now.getFullYear();
 
-    // 3. Populate inline reports (The new "Worker-wise" overview)
+    // 3. Populate inline reports 
+    loadAttendanceUI(currentState);
     loadAttendanceOverview(); 
     
     // 4. Role based layout adjustments
@@ -644,6 +656,11 @@ window.init_attendance = function () {
         if (adminWidgets) adminWidgets.style.display = 'flex';
         loadLeaveApprovals();
         updateAdminRadar();
+        
+        // Pulse Radar every 30s
+        if (!window.radarTimer) {
+            window.radarTimer = setInterval(updateAdminRadar, 30000);
+        }
     }
 
     // 5. Start Geo-Tracking if already active
@@ -673,20 +690,65 @@ window.init_attendance = function () {
     checkTodayShiftExists();
 };
 
+window.updateAdminRadar = function() {
+    const radarContainer = document.getElementById('radar-dots-container');
+    if (!radarContainer || !window.AppData) return;
+
+    const todayStr = getTodayStr();
+    const logs = window.AppData.logs || [];
+    const workers = window.AppData.workers || [];
+    
+    const officeLat = parseFloat(window.AppConfig.OfficeLat);
+    const officeLng = parseFloat(window.AppConfig.OfficeLng);
+    const allowedRadius = parseInt(window.AppConfig.GeoFenceRadius || 200);
+
+    const activeSessions = logs.filter(l => l.Date === todayStr && l.CheckInTime && !l.CheckOutTime);
+
+    let html = '';
+    activeSessions.forEach(log => {
+        if (!log.CheckInLat || !log.CheckInLong) return;
+        
+        const worker = workers.find(w => w.ID === log.WorkerID);
+        const name = worker ? worker.Name : "Unknown";
+        
+        const dist = getDistanceFromLatLonInM(officeLat, officeLng, parseFloat(log.CheckInLat), parseFloat(log.CheckInLong));
+        const angle = (dist * 7) % 360; 
+        const maxRadiusPx = 110; 
+        const distPx = Math.min((dist / allowedRadius) * 60, maxRadiusPx); 
+        
+        const x = 120 + distPx * Math.cos(angle * Math.PI / 180);
+        const y = 120 + distPx * Math.sin(angle * Math.PI / 180);
+
+        html += `
+            <div class="radar-dot" 
+                 style="left:${x}px; top:${y}px; transform: translate(-50%, -50%);" 
+                 title="${name}\nDistance: ${Math.round(dist)}m">
+                ${name.charAt(0)}
+            </div>
+        `;
+    });
+
+    radarContainer.innerHTML = html;
+};
+
 function checkTodayShiftExists() {
-    const today = new Date().toLocaleDateString();
+    const today = getTodayStr();
     const myLogs = window.AppData.logs.filter(l => l.WorkerID === currentUser.id && l.Date === today);
     const btnIn = document.getElementById('btn-checkin');
+    if (!btnIn) return;
     
     if (myLogs.length > 0) {
         btnIn.style.opacity = '0.5';
         btnIn.style.pointerEvents = 'none';
-        btnIn.querySelector('p').innerText = "Already Checked In Today";
-        btnIn.querySelector('h3').style.color = 'var(--text-secondary)';
+        const p = btnIn.querySelector('p');
+        const h3 = btnIn.querySelector('h3');
+        if (p) p.innerText = "Already Checked In Today";
+        if (h3) h3.style.color = 'var(--text-secondary)';
     } else {
         btnIn.style.opacity = '1';
         btnIn.style.pointerEvents = 'auto';
-        btnIn.querySelector('p').innerText = "Start your shift";
+        const p = btnIn.querySelector('p');
+        if (p) p.innerText = "Start your shift";
     }
 }
 
@@ -695,47 +757,17 @@ window.updateRadiusVisualizer = function(val) {
     const ring = document.getElementById('radius-ring');
     if (lbl) lbl.innerText = val + 'm';
     if (ring) {
-        // Map 50-1000m to 20px-300px scale
         let size = 40 + (val / 1000) * 200;
         ring.style.width = size + 'px';
         ring.style.height = size + 'px';
     }
 };
 
-window.updateAdminRadar = function() {
-    const radarContainer = document.getElementById('radar-dots-container');
-    if (!radarContainer || (currentUser.role !== 'Admin' && currentUser.role !== 'Manager')) return;
-
-    // Use cached logs for Radar
-    const logs = window.AppData.logs;
-    const activeSessions = logs.filter(l => l.Date === new Date().toLocaleDateString() && l.CheckInTime && (!l.CheckOutTime || l.CheckOutTime === '-'));
-    
-    let dotsHtml = '';
-    activeSessions.forEach((session, index) => {
-        let x = Math.sin(index * 2) * 60;
-        let y = Math.cos(index * 2) * 60;
-        
-        if (session.CheckInLat && window.AppConfig.OfficeLat) {
-            let latDiff = (session.CheckInLat - window.AppConfig.OfficeLat) * 10000;
-            let lngDiff = (session.CheckInLong - window.AppConfig.OfficeLng) * 10000;
-            x = Math.max(-100, Math.min(100, lngDiff));
-            y = Math.max(-100, Math.min(100, latDiff));
-        }
-
-        dotsHtml += `
-            <div class="radar-dot smooth-transition" style="transform:translate(${x}px, ${y}px);" title="${session.WorkerID}">
-                ${session.WorkerID.charAt(0)}
-            </div>
-        `;
-    });
-    radarContainer.innerHTML = dotsHtml;
-};
-
 window.loadLeaveApprovals = function() {
     const table = document.getElementById('leaves-approval-tbody');
     if (!table || (currentUser.role !== 'Admin' && currentUser.role !== 'Manager')) return;
 
-    const leaves = window.AppData.leaves;
+    const leaves = window.AppData.leaves || [];
     const pending = leaves.filter(lv => lv.Status === 'Pending');
 
     if (pending.length === 0) {
@@ -935,6 +967,7 @@ function processAttendanceAPI(actionType, lat, lng) {
             updateAttendanceButtons('active');
             loadAttendanceUI('active');
             startSilentGeoTracking();
+            syncAppData(true); // Silent sync for all users to see new dot/log
         });
     } else if (actionType === 'out') {
         payload.recordId = localStorage.getItem('att_recordId');
@@ -965,6 +998,7 @@ function processAttendanceAPI(actionType, lat, lng) {
             if(geoWatchId) navigator.geolocation.clearWatch(geoWatchId);
             updateAttendanceButtons('not_started');
             loadAttendanceUI('not_started');
+            syncAppData(true); // Silent sync
         });
     }
 }
@@ -1081,55 +1115,57 @@ function loadAttendanceUI(state) {
         statusEl.innerText = "Ready for Shift"; statusEl.style.color = "var(--text-secondary)";
     }
 
-    // Fetch Today's Logs from Server to populate table
-    const today = new Date().toLocaleDateString();
-    let logPayload = { date: today };
-    if (currentUser.role === 'Worker') logPayload.workerId = currentUser.id;
+    // Fetch Today's Logs from Cache for instant reflection
+    const todayStr = getTodayStr();
+    let logs = window.AppData.logs || [];
+    
+    // Filter for TODAY and current Worker if restricted
+    let filteredLogs = logs.filter(l => l.Date === todayStr);
+    if (currentUser.role === 'Worker') {
+        filteredLogs = filteredLogs.filter(l => l.WorkerID === currentUser.id);
+    }
 
-    apiCall('getAttendanceLogs', logPayload, function(logs) {
-        let html = '';
-        if (!logs || logs.length === 0) {
-            if (state === 'not_started') {
-                 html = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Your daily shift has ended or not started.</td></tr>`;
-            } else {
-                 html = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">No logs yet today.</td></tr>`;
-            }
+    let html = '';
+    if (filteredLogs.length === 0) {
+        if (state === 'not_started') {
+             html = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">Your daily shift has ended or not started.</td></tr>`;
         } else {
-            logs.forEach((log, index) => {
-                let dur = log.TotalHours;
-                let oor = log.OutOfRangeCount || 0;
-                let statusBadge = log.CheckOutTime ? '<div class="badge neutral">Completed</div>' : '<div class="badge active" id="dyn-badge"><i class="material-icons-outlined" style="font-size:14px;">check</i> In Range</div>';
-                
-                // If it's the current running record, give it IDs for live ticking
-                let isLive = (log.ID === localStorage.getItem('att_recordId'));
-                let durId = isLive ? 'id="dyn-duration"' : '';
-                let oorId = isLive ? 'id="dyn-oor"' : '';
-                let badgeId = isLive ? 'id="dyn-badge"' : '';
-
-                html += `
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td style="padding: 16px;">${index + 1}</td>
-                    <td style="padding: 16px;">
-                        <div style="display:flex; align-items:center; gap:12px;">
-                            <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:bold;">${currentUser.name.charAt(0).toUpperCase()}</div>
-                            <span style="font-weight:600;">${currentUser.name}</span>
-                        </div>
-                    </td>
-                    <td style="padding: 16px;">${log.CheckInTime}</td>
-                    <td style="padding: 16px; color:var(--text-secondary);">${log.CheckOutTime || '—'}</td>
-                    <td style="padding: 16px; font-family:monospace; font-size:16px;" ${durId}>${dur === '-' ? '00:00:00' : dur}</td>
-                    <td style="padding: 16px;">
-                         <span style="color:var(--status-error); font-weight:600; font-size:12px; display:flex; align-items:center; gap:4px;"><i class="material-icons-outlined" style="font-size:14px;">warning</i> <span ${oorId}>${oor}</span> times out</span>
-                    </td>
-                    <td style="padding: 16px;">
-                        ${statusBadge}
-                    </td>
-                </tr>`;
-            });
+             html = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">No logs yet today.</td></tr>`;
         }
-        tbody.innerHTML = html;
-        if (state !== 'not_started') refreshActiveTableRow();
-    }, null, true); // Silent load because it's refreshing UI
+    } else {
+        filteredLogs.forEach((log, index) => {
+            let dur = log.TotalHours;
+            let oor = log.OutOfRangeCount || 0;
+            let statusBadge = log.CheckOutTime ? '<div class="badge neutral">Completed</div>' : '<div class="badge active" id="dyn-badge"><i class="material-icons-outlined" style="font-size:14px;">check</i> In Range</div>';
+            
+            // If it's the current running record, give it IDs for live ticking
+            let isLive = (log.ID === localStorage.getItem('att_recordId'));
+            let durId = isLive ? 'id="dyn-duration"' : '';
+            let oorId = isLive ? 'id="dyn-oor"' : '';
+
+            html += `
+            <tr style="border-bottom: 1px solid var(--border-color);">
+                <td style="padding: 16px;">${index + 1}</td>
+                <td style="padding: 16px;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:bold;">${currentUser.name.charAt(0).toUpperCase()}</div>
+                        <span style="font-weight:600;">${currentUser.name}</span>
+                    </div>
+                </td>
+                <td style="padding: 16px;">${formatTime12h(log.CheckInTime)}</td>
+                <td style="padding: 16px; color:var(--text-secondary);">${log.CheckOutTime ? formatTime12h(log.CheckOutTime) : '—'}</td>
+                <td style="padding: 16px; font-family:monospace; font-size:16px;" ${durId}>${dur === '-' ? '00:00:00' : dur}</td>
+                <td style="padding: 16px;">
+                     <span style="color:var(--status-error); font-weight:600; font-size:12px; display:flex; align-items:center; gap:4px;"><i class="material-icons-outlined" style="font-size:14px;">warning</i> <span ${oorId}>${oor}</span> times out</span>
+                </td>
+                <td style="padding: 16px;">
+                    ${statusBadge}
+                </td>
+            </tr>`;
+        });
+    }
+    tbody.innerHTML = html;
+    if (state !== 'not_started') refreshActiveTableRow();
 }
 
 /* =========================================================================
