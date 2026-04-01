@@ -1227,57 +1227,6 @@ function loadAttendanceUI(state) {
     if (currentUser.role === 'Worker') {
         filteredLogs = filteredLogs.filter(l => l.WorkerID === currentUser.id);
     }
-
-    window.loadAttendanceOverview = function () {
-    const tbody = document.getElementById('attendance-overview-tbody');
-    const titleEl = document.getElementById('attendance-log-title');
-    if (!tbody || !window.AppData) return;
-
-    const logs = window.AppData.logs || [];
-    const workers = window.AppData.workers || [];
-    const month = parseInt(document.getElementById('ov-month').value);
-    const year = parseInt(document.getElementById('ov-year').value);
-
-    // Update Title with Month Name
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    if (titleEl) titleEl.innerHTML = `<i class="material-icons-outlined" style="vertical-align:middle; margin-right:8px; color:var(--accent-primary);">assignment</i> Attendance Log — ${monthNames[month-1]} ${year}`;
-
-    // Filter logs for selected month/year
-    const filteredLogs = logs.filter(l => {
-        const dStr = formatSheetDate(l.Date);
-        if (!dStr) return false;
-        const parts = dStr.split("/");
-        return parseInt(parts[1]) === month && parseInt(parts[2]) === year;
-    }).sort((a, b) => new Date(b.Date) - new Date(a.Date)); // Newest first
-
-    if (filteredLogs.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">No records found for this period.</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = filteredLogs.map((log, index) => {
-        const worker = workers.find(w => w.ID === log.WorkerID) || { Name: 'Unknown' };
-        const statusClass = log.CheckOutTime ? 'badge neutral' : 'badge active';
-        const statusText = log.CheckOutTime ? 'Completed' : 'Running';
-
-        return `
-            <tr>
-                <td style="padding:16px 24px; color:var(--text-secondary);">${index + 1}</td>
-                <td style="padding:16px 24px;">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px;">${worker.Name.charAt(0)}</div>
-                        <div style="font-weight:600;">${worker.Name}</div>
-                    </div>
-                </td>
-                <td style="padding:16px 24px;">${log.Date}</td>
-                <td style="padding:16px 24px; color:var(--status-success); font-weight:500;">${formatTime12h(log.CheckInTime)}</td>
-                <td style="padding:16px 24px; color:var(--status-error); font-weight:500;">${log.CheckOutTime ? formatTime12h(log.CheckOutTime) : '—'}</td>
-                <td style="padding:16px 24px; font-family:monospace; font-weight:600; font-size:14px;">${log.TotalHours || '00:00:00'}</td>
-                <td style="padding:16px 24px;"><span class="${statusClass}">${statusText}</span></td>
-            </tr>
-        `;
-    }).join('');
-};
     
     let html = '';
     if (filteredLogs.length === 0) {
@@ -1322,8 +1271,60 @@ function loadAttendanceUI(state) {
     if (state !== 'not_started') refreshActiveTableRow();
 }
 
+window.loadAttendanceOverview = function () {
+    const tbody = document.getElementById('attendance-overview-tbody');
+    const titleEl = document.getElementById('attendance-log-title');
+    if (!tbody || !window.AppData) return;
+
+    const logs = window.AppData.logs || [];
+    const workers = window.AppData.workers || [];
+    const month = parseInt(document.getElementById('ov-month').value || (new Date().getMonth() + 1));
+    const year = parseInt(document.getElementById('ov-year').value || new Date().getFullYear());
+
+    // Update Title with Month Name
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    if (titleEl) titleEl.innerHTML = `<i class="material-icons-outlined" style="vertical-align:middle; margin-right:8px; color:var(--accent-primary);">assignment</i> Attendance Log — ${monthNames[month-1]} ${year}`;
+
+    // Filter logs for selected month/year
+    const filteredLogs = logs.filter(l => {
+        const dStr = formatSheetDate(l.Date);
+        if (!dStr) return false;
+        const parts = dStr.split("/");
+        return parseInt(parts[1]) === month && parseInt(parts[2]) === year;
+    }).sort((a, b) => new Date(b.Date) - new Date(a.Date)); // Newest first
+
+    if (filteredLogs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="padding:48px; text-align:center; color:var(--text-secondary);">No records found for this period.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filteredLogs.map((log, index) => {
+        const worker = workers.find(w => w.ID === log.WorkerID) || { Name: 'Unknown' };
+        const statusClass = log.CheckOutTime ? 'badge neutral' : 'badge active';
+        const statusText = log.CheckOutTime ? 'Completed' : 'Running';
+
+        return `
+            <tr>
+                <td style="padding:16px 24px; color:var(--text-secondary);">${index + 1}</td>
+                <td style="padding:16px 24px;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px;">${worker.Name.charAt(0)}</div>
+                        <div style="font-weight:600;">${worker.Name}</div>
+                    </div>
+                </td>
+                <td style="padding:16px 24px;">${log.Date}</td>
+                <td style="padding:16px 24px; color:var(--status-success); font-weight:500;">${formatTime12h(log.CheckInTime)}</td>
+                <td style="padding:16px 24px; color:var(--status-error); font-weight:500;">${log.CheckOutTime ? formatTime12h(log.CheckOutTime) : '—'}</td>
+                <td style="padding:16px 24px; font-family:monospace; font-weight:600; font-size:14px;">${log.TotalHours || '00:00:00'}</td>
+                <td style="padding:16px 24px;"><span class="${statusClass}">${statusText}</span></td>
+            </tr>
+        `;
+    }).join('');
+};
+
 /* =========================================================================
    JOB WORK MODULE LOGIC
+========================================================================= */
 let currentJobTab = 'active'; // 'active' or 'settled'
 
 window.loadJobWork = function () {
@@ -1546,39 +1547,6 @@ window.app_submitSettleJob = function (e, jobId, price, maxQty) {
 /* =========================================================================
    SETTINGS MODULE LOGIC
 ========================================================================= */
-window.init_settings = function () {
-    // Determine the active inputs inside view-container
-    const vc = document.getElementById('view-container');
-    if (!vc) return;
-
-    const setGps = vc.querySelector('#set-gps-req');
-    const setLat = vc.querySelector('#set-lat');
-    const setLng = vc.querySelector('#set-lng');
-    const setRadius = vc.querySelector('#set-radius');
-
-    const applyConfig = (configs) => {
-        if (!configs) return;
-        let isReq = configs['GeoLocationRequired'] === 'true' || configs['GeoLocationRequired'] === true;
-        if (setGps) setGps.checked = isReq;
-        if (setLat && configs['OfficeLat']) setLat.value = configs['OfficeLat'];
-        if (setLng && configs['OfficeLng']) setLng.value = configs['OfficeLng'];
-        if (setRadius && configs['GeoFenceRadius']) setRadius.value = configs['GeoFenceRadius'];
-    };
-
-    if (window.AppConfig && Object.keys(window.AppConfig).length > 0) {
-        applyConfig(window.AppConfig);
-    } else {
-        // Fetch from server if not cached yet
-        let btn = vc.querySelector('button[type="submit"]');
-        if (btn) btn.innerText = "Loading...";
-        apiCall('getGlobalConfig', {}, function (configs) {
-            window.AppConfig = configs || {};
-            applyConfig(window.AppConfig);
-            if (btn) btn.innerHTML = '<i class="material-icons-outlined" style="vertical-align:middle; font-size:18px;">save</i> Save Config';
-        }, null, true);
-    }
-};
-
 window.app_saveSettings = function (e) {
     e.preventDefault();
     const vc = document.getElementById('view-container');
@@ -1735,7 +1703,7 @@ function toggleDetailedLogs(workerId) {
     if (el) el.classList.toggle('hidden');
 }
 
-window.init_settings = function() {
+window.init_settings_logic = function() {
     if (currentUser.role !== 'Admin' && currentUser.role !== 'Manager') return;
     
     const config = window.AppConfig || {};
