@@ -1017,6 +1017,66 @@ body {
 }
 
 /* ========================================================
+   CALENDAR & REPORTS STYLES
+   ======================================================== */
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.cal-day-header {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    padding: 8px 0;
+}
+
+.cal-day {
+    aspect-ratio: 1;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.cal-day:hover {
+    background: var(--bg-surface-elevated);
+    border-color: var(--accent-primary);
+}
+
+.cal-day.empty { opacity: 0.1; pointer-events: none; }
+.cal-day.today { border: 1.5px solid var(--accent-primary); box-shadow: 0 0 10px rgba(140, 82, 255, 0.2); }
+.cal-day.weekend { background: rgba(255,255,255,0.02); }
+
+.cal-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-top: 6px;
+}
+
+.cal-dot.present { background: var(--status-success); box-shadow: 0 0 8px var(--status-success); }
+.cal-dot.absent { background: var(--status-error); }
+.cal-dot.leave { background: var(--status-warning); }
+.cal-dot.partial { background: var(--status-info); }
+
+.cal-num { font-size: 14px; font-weight: 500; }
+
+.analytics-card {
+    background: linear-gradient(135deg, rgba(140,82,255,0.05), transparent);
+    border-left: 4px solid var(--accent-primary);
+}
+
+/* ========================================================
    MOBILE & TABLET RESPONSIVE DESIGN
 ======================================================== */
 @media screen and (max-width: 768px) {
