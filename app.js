@@ -129,18 +129,19 @@ const AuthManager = {
     // Robust Date Normalizer (Handles strings and Date objects from Sheet)
     window.formatSheetDate = function(val) {
         if (!val) return "";
-        let d = (val instanceof Date) ? val : new Date(val);
-        if (isNaN(d.getTime())) {
-            // Fallback for strings like DD/MM/YYYY that JS ctor might fail on in some locales
-            if (typeof val === 'string' && val.includes('/')) {
-                let parts = val.split(/[\/-]/);
-                if (parts.length === 3) {
-                    // Assume DD/MM/YYYY
-                    return `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2].length === 2 ? '20'+parts[2] : parts[2]}`;
-                }
+        // Priority 1: Direct Slash String (Strictly DD/MM/YYYY)
+        if (typeof val === 'string' && val.includes('/')) {
+            let parts = val.split(/[\/-]/);
+            if (parts.length === 3) {
+                 // Return normalized DD/MM/YYYY
+                 let y = parts[2].trim();
+                 if (y.length === 2) y = '20' + y;
+                 return `${parts[0].trim().padStart(2, '0')}/${parts[1].trim().padStart(2, '0')}/${y}`;
             }
-            return String(val);
         }
+        // Priority 2: Date Object
+        let d = (val instanceof Date) ? val : new Date(val);
+        if (isNaN(d.getTime())) return String(val); // Fallback
         return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
     };
         // 1. Initial Data Sync (Parallel Load)
@@ -318,10 +319,16 @@ async function syncAppData(silent = false) {
         if (!silent) Loader.hide();
         // Refresh Current View UI if data changed
         if (activeView === 'attendance') {
-            loadAttendanceUI(localStorage.getItem('att_shiftState') || 'not_started');
+            const shiftState = localStorage.getItem('att_shiftState') || 'not_started';
+            loadAttendanceUI(shiftState);
             loadAttendanceOverview();
             updateTodaySummary();
             if (currentUser.role === 'Admin' || currentUser.role === 'Manager') updateAdminRadar();
+            
+            // Resume GPS watch if active
+            if (shiftState === 'active' || shiftState === 'paused') {
+                startSilentGeoTracking();
+            }
         }
     }
 }
@@ -747,7 +754,7 @@ window.updateAdminRadar = function() {
         const y = 120 + distPx * Math.sin(angle * Math.PI / 180);
 
         html += `
-            <div class="radar-dot" 
+            <div class="radar-dot ${inRange ? 'in-range' : 'out-range'}" 
                  style="left:${x}px; top:${y}px; transform: translate(-50%, -50%);" 
                  title="${name}\nDistance: ${Math.round(dist)}m\nStatus: ${inRange ? 'In Range' : 'Out of Range'}">
                 ${name.charAt(0)}
@@ -963,24 +970,34 @@ window.handleAttendanceAction = function (actionType) {
             Toast.show("Detecting Location...", "info");
             navigator.geolocation.getCurrentPosition(
                 function (position) {
-                    processAttendanceAPI(actionType, position.coords.latitude, position.coords.longitude);
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    
+                    // --- STRICT GEOFENCING CHECK ---
+                    let officeLat = parseFloat(window.AppConfig.OfficeLat);
+                    let officeLng = parseFloat(window.AppConfig.OfficeLng);
+                    let allowedRadius = parseInt(window.AppConfig.GeoFenceRadius || 200);
+                    
+                    if (!isNaN(officeLat) && !isNaN(officeLng)) {
+                        let dist = getDistanceFromLatLonInM(lat, lng, officeLat, officeLng);
+                        if (dist > allowedRadius) {
+                            Loader.hide();
+                            Toast.show(`Blocked: You are ${Math.round(dist)}m away. You must be at the Office range to Check-${actionType.toUpperCase()}.`, "error");
+                            return; // PREVENT CALL
+                        }
+                    }
+
+                    processAttendanceAPI(actionType, lat, lng);
                 },
                 function (error) {
-                    let errMsg = error.message || "Unknown error";
-                    // If permission denied, show a more helpful message
-                    if (error.code === 1) {
-                        errMsg = "Permission Denied. Please enable location access in your browser settings.";
-                    }
+                    let errMsg = "Permission Denied. Please enable location access in settings.";
+                    if (error.code === 2) errMsg = "Position unavailable. Please check your signal.";
+                    if (error.code === 3) errMsg = "GPS Timeout. Please try again.";
                     
-                    if (requireGps) {
-                        Loader.hide();
-                        Toast.show("Location Required: " + errMsg, "error");
-                    } else {
-                        Toast.show("GPS Warning: " + errMsg + ". Standard log recorded.", "warning");
-                        processAttendanceAPI(actionType, "", "");
-                    }
+                    Loader.hide();
+                    Toast.show("Location Error: " + errMsg, "error");
                 },
-                { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         } else {
             if (requireGps) {
@@ -1083,20 +1100,25 @@ function startSilentGeoTracking() {
     let officeLng = parseFloat(window.AppConfig.OfficeLng);
     let allowedRadius = parseInt(window.AppConfig.GeoFenceRadius || 200); // meters
     
-    if (isNaN(officeLat) || isNaN(officeLng)) return;
-
-    geoWatchId = navigator.geolocation.watchPosition(
+    if (isNaN(officeLat) || isNaN(officeLng)) return;    geoWatchId = navigator.geolocation.watchPosition(
         function (pos) {
             let dist = getDistanceFromLatLonInM(pos.coords.latitude, pos.coords.longitude, officeLat, officeLng);
             let currentState = localStorage.getItem('att_shiftState');
             
             if (dist > allowedRadius && currentState === 'active') {
+                // AUTO PAUSE
                 processAttendanceAPI('pause', pos.coords.latitude, pos.coords.longitude);
-                Toast.show(`Auto-Paused: You are ${Math.round(dist)}m away from office.`, 'warning');
+                Toast.show(`Auto-Paused: Out of range (${Math.round(dist)}m).`, 'warning');
             } else if (dist <= allowedRadius && currentState === 'paused') {
-                 // Auto-Resume
+                 // AUTO RESUME (But only if it was auto-paused recently, let's assume always for now)
                  processAttendanceAPI('resume', pos.coords.latitude, pos.coords.longitude);
                  Toast.show(`Auto-Resumed: Back in range.`, 'success');
+            }
+            
+            // Sync with admin radar if possible (throttle to save battery/bandwidth)
+            if (currentUser.role === 'Worker') {
+                // We could send location updates here, but GAS is too slow for real-time tracking
+                // So we rely on the main sync interval for the admin view
             }
         },
         function(err) { console.warn("Watch position err", err); },

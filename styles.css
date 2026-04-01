@@ -925,14 +925,25 @@ body {
     height: 24px;
     background: var(--status-success);
     border-radius: 50%;
-    color: #000;
+    color: #fff;
     font-size: 10px;
     font-weight: bold;
     display: flex;
     align-items: center;
     justify-content: center;
     box-shadow: 0 0 10px var(--status-success);
-    transition: transform 1s ease-in-out;
+    transition: all 0.5s ease-in-out;
+    border: 2px solid rgba(255,255,255,0.3);
+}
+
+.radar-dot.in-range {
+    background: var(--status-success);
+    box-shadow: 0 0 15px var(--status-success);
+}
+
+.radar-dot.out-range {
+    background: var(--status-error);
+    box-shadow: 0 0 15px var(--status-error);
 }
 
 @keyframes pulse {
