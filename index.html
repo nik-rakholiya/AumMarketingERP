@@ -595,9 +595,11 @@
                         <input type="range" id="set-radius" class="form-input" min="50" max="1000" step="50" value="200" style="padding:0; margin:10px 0;" oninput="updateRadiusVisualizer(this.value)">
                         
                         <!-- Radius Visualizer Preview -->
-                        <div id="radius-preview-container" style="position:relative; width:100%; height:160px; background:rgba(255,255,255,0.02); border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--border-color); margin-top:10px;">
-                            <i class="material-icons-outlined" style="font-size:32px; color:var(--accent-secondary); z-index:2;">domain</i>
-                            <div id="radius-ring" style="position:absolute; width:100px; height:100px; border:2px solid var(--accent-primary); border-radius:50%; background:rgba(140,82,255,0.05); transition: scale 0.2s ease-out; animation: pulse 3s infinite;"></div>
+                        <div id="radius-preview-container" style="position:relative; width:100%; height:160px; background:rgba(255,255,255,0.02); border-radius:12px; overflow:hidden; border:1px solid var(--border-color); margin-top:10px;">
+                            <!-- Dead-Center Icon -->
+                            <i class="material-icons-outlined" style="position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); font-size:32px; color:var(--accent-secondary); z-index:2;">domain</i>
+                            <!-- Dead-Center Ring -->
+                            <div id="radius-ring" style="position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:100px; height:100px; border:2px solid var(--accent-primary); border-radius:50%; background:rgba(140,82,255,0.05); transition: scale 0.2s ease-out; animation: pulse 3s infinite;"></div>
                         </div>
                     </div>
                     <div style="margin-top: 24px;">
@@ -681,6 +683,7 @@
 
         window.init_workers = function () { if (window.loadWorkers) window.loadWorkers(); };
         window.init_products = function () { if (window.loadMasterData) window.loadMasterData(); };
+        window.init_settings = function () { if (window.init_settings) window.init_settings(); };
     </script>
 </body>
 

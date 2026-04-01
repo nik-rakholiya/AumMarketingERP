@@ -120,30 +120,6 @@ const AuthManager = {
         document.getElementById('user-role').innerText = currentUser.role;
         document.getElementById('user-avatar').innerText = currentUser.name.charAt(0).toUpperCase();
 
-        // Standardized Date Format: DD/MM/YYYY
-    window.getTodayStr = function() {
-        const d = new Date();
-        return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
-    };
-
-    // Robust Date Normalizer (Handles strings and Date objects from Sheet)
-    window.formatSheetDate = function(val) {
-        if (!val) return "";
-        // Priority 1: Direct Slash String (Strictly DD/MM/YYYY)
-        if (typeof val === 'string' && val.includes('/')) {
-            let parts = val.split(/[\/-]/);
-            if (parts.length === 3) {
-                 // Return normalized DD/MM/YYYY
-                 let y = parts[2].trim();
-                 if (y.length === 2) y = '20' + y;
-                 return `${parts[0].trim().padStart(2, '0')}/${parts[1].trim().padStart(2, '0')}/${y}`;
-            }
-        }
-        // Priority 2: Date Object
-        let d = (val instanceof Date) ? val : new Date(val);
-        if (isNaN(d.getTime())) return String(val); // Fallback
-        return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
-    };
         // 1. Initial Data Sync (Parallel Load)
         syncAppData().then(() => {
              // 2. Load default view after data is ready
@@ -161,6 +137,29 @@ const AuthManager = {
         currentToken = null;
         this.showAuthScreen();
     }
+};
+
+// Global Helpers (Standardized Date Format: DD/MM/YYYY)
+window.getTodayStr = function() {
+    const d = new Date();
+    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+};
+
+window.formatSheetDate = function(val) {
+    if (!val) return "";
+    // Priority 1: Direct Slash String (Strictly DD/MM/YYYY)
+    if (typeof val === 'string' && val.includes('/')) {
+        let parts = val.split(/[\/-]/);
+        if (parts.length === 3) {
+             let y = parts[2].trim();
+             if (y.length === 2) y = '20' + y;
+             return `${parts[0].trim().padStart(2, '0')}/${parts[1].trim().padStart(2, '0')}/${y}`;
+        }
+    }
+    // Priority 2: Date Object
+    let d = (val instanceof Date) ? val : new Date(val);
+    if (isNaN(d.getTime())) return String(val); // Fallback
+    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
 };
 
 function toggleAuthForm(target) {
@@ -1778,7 +1777,7 @@ window.app_saveSettings = function(e) {
         GeoFenceRadius: document.getElementById('set-radius').value
     };
     
-    apiCall('updateGlobalConfig', payload, function(res) {
+    apiCall('saveGlobalConfig', payload, function(res) {
         Toast.show("Settings Updated Successfully!", "success");
         // Refetch config so changes are immediate
         syncAppData(true);
