@@ -708,12 +708,14 @@ window.updateAdminRadar = function() {
 
     let html = '';
     activeSessions.forEach(log => {
-        if (!log.CheckInLat || !log.CheckInLong) return;
+        const lat = parseFloat(log.CheckInLat);
+        const lng = parseFloat(log.CheckInLong);
+        if (isNaN(lat) || isNaN(lng) || lat === 0) return;
         
         const worker = workers.find(w => w.ID === log.WorkerID);
         const name = worker ? worker.Name : "Unknown";
         
-        const dist = getDistanceFromLatLonInM(officeLat, officeLng, parseFloat(log.CheckInLat), parseFloat(log.CheckInLong));
+        const dist = getDistanceFromLatLonInM(officeLat, officeLng, lat, lng);
         const angle = (dist * 7) % 360; 
         const maxRadiusPx = 110; 
         const distPx = Math.min((dist / allowedRadius) * 60, maxRadiusPx); 
@@ -724,7 +726,7 @@ window.updateAdminRadar = function() {
         html += `
             <div class="radar-dot" 
                  style="left:${x}px; top:${y}px; transform: translate(-50%, -50%);" 
-                 title="${name}\nDistance: ${Math.round(dist)}m">
+                 title="${name}\nDistance: ${Math.round(dist)}m\nStatus: In Range">
                 ${name.charAt(0)}
             </div>
         `;
@@ -928,22 +930,27 @@ window.handleAttendanceAction = function (actionType) {
 
     if (actionType === 'in' || actionType === 'out') {
         if (navigator.geolocation) {
+            Toast.show("Detecting Location...", "info");
             navigator.geolocation.getCurrentPosition(
                 function (position) {
                     processAttendanceAPI(actionType, position.coords.latitude, position.coords.longitude);
                 },
                 function (error) {
                     let errMsg = error.message || "Unknown error";
+                    // If permission denied, show a more helpful message
+                    if (error.code === 1) {
+                        errMsg = "Permission Denied. Please enable location access in your browser settings.";
+                    }
+                    
                     if (requireGps) {
                         Loader.hide();
-                        Toast.show("Location blocked: " + errMsg, "error");
+                        Toast.show("Location Required: " + errMsg, "error");
                     } else {
-                        // User denied or error, but not required, so proceed without GPS
-                        Toast.show("GPS disabled (" + errMsg + "), logging without location.", "warning");
+                        Toast.show("GPS Warning: " + errMsg + ". Standard log recorded.", "warning");
                         processAttendanceAPI(actionType, "", "");
                     }
                 },
-                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
             );
         } else {
             if (requireGps) {
