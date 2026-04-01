@@ -13,6 +13,16 @@ let currentUser = null;
 let currentToken = null;
 let activeView = '';
 
+/* Global Data Cache */
+window.AppData = {
+    workers: [],
+    logs: [],
+    leaves: [],
+    products: [],
+    materials: [],
+    lastSync: null
+};
+
 document.addEventListener("DOMContentLoaded", function () {
     // Load preferred theme
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -110,18 +120,15 @@ const AuthManager = {
         document.getElementById('user-role').innerText = currentUser.role;
         document.getElementById('user-avatar').innerText = currentUser.name.charAt(0).toUpperCase();
 
-        // Fetch Global Configs on login
-        apiCall('getGlobalConfig', {}, function (configs) {
-            window.AppConfig = configs;
-        }, null, true);
+        // 1. Initial Data Sync (Parallel Load)
+        syncAppData().then(() => {
+             // 2. Load default view after data is ready
+             navigate('dashboard');
+        });
 
-        // Show/Hide Admin Modules
-        if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
-            document.getElementById('admin-menu').classList.remove('hidden');
-        }
-
-        // Load default view
-        navigate('dashboard');
+        // Periodic Background Sync (Every 2 mins)
+        if (window.syncInterval) clearInterval(window.syncInterval);
+        window.syncInterval = setInterval(() => syncAppData(true), 120000);
     },
     logout: function () {
         localStorage.removeItem('sessionToken');
@@ -248,6 +255,76 @@ async function apiCall(action, payload, onSuccess, onError, silentLoad = false) 
         if (onError) onError(error);
     } finally {
         if (!silentLoad) Loader.hide();
+    }
+}
+
+/* =========================================================================
+   CACHE MANAGEMENT (BLAZING FAST DATA)
+========================================================================= */
+async function syncAppData(silent = false) {
+    if (!silent) Loader.show();
+    
+    try {
+        const [workers, products, logs, leaves, materials, config] = await Promise.all([
+            apiCallPromise('getWorkers', {}),
+            apiCallPromise('getProducts', {}),
+            apiCallPromise('getAttendanceLogs', {}),
+            apiCallPromise('getLeaves', {}),
+            apiCallPromise('getRawMaterials', {}),
+            apiCallPromise('getGlobalConfig', {})
+        ]);
+
+        window.AppData = {
+            workers: workers || [],
+            products: products || [],
+            logs: logs || [],
+            leaves: leaves || [],
+            materials: materials || [],
+            lastSync: new Date()
+        };
+        window.AppConfig = config || {};
+
+        if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
+            document.getElementById('admin-menu').classList.remove('hidden');
+        }
+
+        console.log("App Data Synced:", window.AppData);
+    } catch (err) {
+        console.error("Sync Error:", err);
+    } finally {
+        if (!silent) Loader.hide();
+    }
+}
+
+function apiCallPromise(action, data) {
+    return new Promise((resolve, reject) => {
+        apiCall(action, data, resolve, reject, true);
+    });
+}
+
+function switchAttTab(tab) {
+    const tabs = ['logs', 'leaves'];
+    tabs.forEach(t => {
+        document.getElementById('tab-att-' + t).classList.remove('active');
+        document.getElementById('tab-att-' + t).style.borderBottom = 'none';
+        document.getElementById('tab-att-' + t).style.color = 'var(--text-secondary)';
+        document.getElementById('att-view-' + t).classList.add('hidden');
+    });
+
+    const active = document.getElementById('tab-att-' + tab);
+    active.classList.add('active');
+    active.style.borderBottom = '2px solid var(--accent-primary)';
+    active.style.color = 'var(--text-primary)';
+    document.getElementById('att-view-' + tab).classList.remove('hidden');
+
+    if (tab === 'leaves') {
+        if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
+            loadLeaveApprovals();
+        }
+        loadWorkerLeaves();
+    } else {
+        loadAttendanceOverview();
+        updateAdminRadar();
     }
 }
 
@@ -405,33 +482,29 @@ window.loadWorkers = function () {
     const tbody = document.getElementById('workers-tbody');
     if (!tbody) return;
 
-    // Inject smooth skeleton loading instead of blocking everything
-    tbody.innerHTML = SkeletonBuilder.generateTable(4, 5);
+    const data = window.AppData.workers;
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No workers found.</td></tr>';
+        return;
+    }
 
-    apiCall('getWorkers', {}, function (data) {
-        if (!data || data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No workers found.</td></tr>';
-            return;
-        }
-
-        let html = '';
-        data.forEach(w => {
-            let statusBadge = w.Status === 'Active' ? 'active' : (w.Status === 'Pending' ? 'pending' : 'neutral');
-            html += `
-            <tr style="animation: fadeIn 0.4s ease-out;">
-                <td style="font-weight:600;">${w.Name}</td>
-                <td>${w.Phone}</td>
-                <td>${w.Role || 'Worker'}</td>
-                <td><span class="badge ${statusBadge}">${w.Status}</span></td>
-                <td>
-                    <button class="icon-btn" onclick="Modal.openWorkerRole('${w.ID}', '${w.Name}', '${w.Role}', '${w.Status}')">
-                        <i class="material-icons-outlined">edit</i>
-                    </button>
-                </td>
-            </tr>`;
-        });
-        tbody.innerHTML = html;
-    }, null, true); // <--- Note: true enables silentLoad (no global splash)
+    let html = '';
+    data.forEach(w => {
+        let statusBadge = w.Status === 'Active' ? 'active' : (w.Status === 'Pending' ? 'pending' : 'neutral');
+        html += `
+        <tr style="animation: fadeIn 0.4s ease-out;">
+            <td style="font-weight:600;">${w.Name}</td>
+            <td>${w.Email || '-'}</td>
+            <td>${w.Role || 'Worker'}</td>
+            <td><span class="badge ${statusBadge}">${w.Status}</span></td>
+            <td>
+                <button class="icon-btn" onclick="Modal.openWorkerRole('${w.ID}', '${w.Name}', '${w.Role}', '${w.Status}')">
+                    <i class="material-icons-outlined">edit</i>
+                </button>
+            </td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
 };
 
 window.app_saveWorker = function (e, workerId) {
@@ -453,19 +526,14 @@ window.loadMasterData = function () {
     const tbodyProd = document.getElementById('products-tbody');
     const tbodyMat = document.getElementById('materials-tbody');
 
-    if (tbodyProd) tbodyProd.innerHTML = SkeletonBuilder.generateTable(3, 4);
-    if (tbodyMat) tbodyMat.innerHTML = SkeletonBuilder.generateTable(3, 3);
-
-    // Load Products
-    apiCall('getProducts', {}, function (data) {
-        if (!tbodyProd) return;
-        window.cachedProducts = data || []; // Cache for parent dropdowns
-
-        if (!data || data.length === 0) {
+    // Load Products from Cache
+    const products = window.AppData.products;
+    if (tbodyProd) {
+        if (!products || products.length === 0) {
             tbodyProd.innerHTML = '<tr><td colspan="5" style="text-align:center;">No products found.</td></tr>';
         } else {
             let html = '';
-            data.forEach(p => {
+            products.forEach(p => {
                 let badge = p.ParentProductID ? `<span class="badge neutral" style="font-size:10px; margin-left:8px;">Sub</span>` : '';
                 html += `<tr style="animation: fadeIn 0.4s ease-out;">
                             <td><b>${p.Name}</b> ${badge}</td>
@@ -479,21 +547,21 @@ window.loadMasterData = function () {
             });
             tbodyProd.innerHTML = html;
         }
-    }, null, true);
+    }
 
-    // Load Materials
-    apiCall('getRawMaterials', {}, function (data) {
-        if (!tbodyMat) return;
-        if (!data || data.length === 0) {
+    // Load Materials from Cache
+    const materials = window.AppData.materials;
+    if (tbodyMat) {
+        if (!materials || materials.length === 0) {
             tbodyMat.innerHTML = '<tr><td colspan="3" style="text-align:center;">No materials found.</td></tr>';
         } else {
             let html = '';
-            data.forEach(m => {
+            materials.forEach(m => {
                 html += `<tr style="animation: fadeIn 0.4s ease-out;"><td><b>${m.Name}</b></td><td>${m.MinStock}</td><td>${m.Unit}</td></tr>`;
             });
             tbodyMat.innerHTML = html;
         }
-    }, null, true);
+    }
 };
 
 window.app_saveProduct = function (e) {
@@ -557,7 +625,7 @@ window.init_attendance = function () {
     if (!currentUser) return;
     const currentState = localStorage.getItem('att_shiftState') || 'not_started';
     
-    // 1. Initial UI Updates
+    // Initial UI Updates
     updateAttendanceButtons(currentState);
     
     // 2. Set default month/year for overview based on current date
@@ -574,20 +642,8 @@ window.init_attendance = function () {
     if (currentUser.role === 'Admin' || currentUser.role === 'Manager') {
         const adminWidgets = document.getElementById('admin-attendance-widgets');
         if (adminWidgets) adminWidgets.style.display = 'flex';
-        
-        const leaveApprovals = document.getElementById('admin-leave-approvals');
-        if (leaveApprovals) leaveApprovals.classList.remove('hidden');
-        
         loadLeaveApprovals();
         updateAdminRadar();
-        if (window.radarInterval) clearInterval(window.radarInterval);
-        window.radarInterval = setInterval(updateAdminRadar, 30000);
-    } else {
-        const adminWidgets = document.getElementById('admin-attendance-widgets');
-        if (adminWidgets) adminWidgets.style.display = 'none';
-        
-        const leaveApprovals = document.getElementById('admin-leave-approvals');
-        if (leaveApprovals) leaveApprovals.classList.add('hidden');
     }
 
     // 5. Start Geo-Tracking if already active
@@ -613,9 +669,26 @@ window.init_attendance = function () {
     clockInterval = setInterval(updateClock, 1000);
     updateClock();
 
-    // 7. Initial Table Populate (State message)
-    loadAttendanceUI(currentState);
+    // 7. Check In Restriction UI Check
+    checkTodayShiftExists();
 };
+
+function checkTodayShiftExists() {
+    const today = new Date().toLocaleDateString();
+    const myLogs = window.AppData.logs.filter(l => l.WorkerID === currentUser.id && l.Date === today);
+    const btnIn = document.getElementById('btn-checkin');
+    
+    if (myLogs.length > 0) {
+        btnIn.style.opacity = '0.5';
+        btnIn.style.pointerEvents = 'none';
+        btnIn.querySelector('p').innerText = "Already Checked In Today";
+        btnIn.querySelector('h3').style.color = 'var(--text-secondary)';
+    } else {
+        btnIn.style.opacity = '1';
+        btnIn.style.pointerEvents = 'auto';
+        btnIn.querySelector('p').innerText = "Start your shift";
+    }
+}
 
 window.updateRadiusVisualizer = function(val) {
     const lbl = document.getElementById('lbl-radius');
@@ -631,63 +704,85 @@ window.updateRadiusVisualizer = function(val) {
 
 window.updateAdminRadar = function() {
     const radarContainer = document.getElementById('radar-dots-container');
-    if (!radarContainer || currentUser.role !== 'Admin') return;
+    if (!radarContainer || (currentUser.role !== 'Admin' && currentUser.role !== 'Manager')) return;
 
-    apiCall('getAttendanceLogs', { date: new Date().toLocaleDateString() }, function(logs) {
-        // Find active sessions (checked in but not checked out)
-        const activeSessions = logs.filter(l => l.CheckInTime && (!l.CheckOutTime || l.CheckOutTime === '-'));
+    // Use cached logs for Radar
+    const logs = window.AppData.logs;
+    const activeSessions = logs.filter(l => l.Date === new Date().toLocaleDateString() && l.CheckInTime && (!l.CheckOutTime || l.CheckOutTime === '-'));
+    
+    let dotsHtml = '';
+    activeSessions.forEach((session, index) => {
+        let x = Math.sin(index * 2) * 60;
+        let y = Math.cos(index * 2) * 60;
         
-        let dotsHtml = '';
-        activeSessions.forEach((session, index) => {
-            // Mocking position if lat/long is missing, otherwise calculate relative to center
-            let x = Math.sin(index * 2) * 60;
-            let y = Math.cos(index * 2) * 60;
-            
-            if (session.CheckInLat && window.AppConfig.OfficeLat) {
-                // Simplified relative positioning for the radar graphic
-                let latDiff = (session.CheckInLat - window.AppConfig.OfficeLat) * 10000;
-                let lngDiff = (session.CheckInLong - window.AppConfig.OfficeLng) * 10000;
-                x = Math.max(-100, Math.min(100, lngDiff));
-                y = Math.max(-100, Math.min(100, latDiff));
-            }
+        if (session.CheckInLat && window.AppConfig.OfficeLat) {
+            let latDiff = (session.CheckInLat - window.AppConfig.OfficeLat) * 10000;
+            let lngDiff = (session.CheckInLong - window.AppConfig.OfficeLng) * 10000;
+            x = Math.max(-100, Math.min(100, lngDiff));
+            y = Math.max(-100, Math.min(100, latDiff));
+        }
 
-            dotsHtml += `
-                <div class="radar-dot" style="transform:translate(${x}px, ${y}px);" title="${session.WorkerID}">
-                    ${session.WorkerID.charAt(0)}
-                </div>
-            `;
-        });
-        radarContainer.innerHTML = dotsHtml;
-    }, null, true);
+        dotsHtml += `
+            <div class="radar-dot smooth-transition" style="transform:translate(${x}px, ${y}px);" title="${session.WorkerID}">
+                ${session.WorkerID.charAt(0)}
+            </div>
+        `;
+    });
+    radarContainer.innerHTML = dotsHtml;
 };
 
 window.loadLeaveApprovals = function() {
-    const vc = document.getElementById('view-container');
-    const table = vc.querySelector('#leaves-approval-tbody');
-    if (!table || currentUser.role !== 'Admin') return;
+    const table = document.getElementById('leaves-approval-tbody');
+    if (!table || (currentUser.role !== 'Admin' && currentUser.role !== 'Manager')) return;
 
-    apiCall('getLeaves', {}, function(leaves) {
-        const pending = leaves.filter(lv => lv.Status === 'Pending');
-        if (pending.length === 0) {
-            table.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:24px; color:var(--text-secondary);">No pending leave requests.</td></tr>';
-            return;
-        }
+    const leaves = window.AppData.leaves;
+    const pending = leaves.filter(lv => lv.Status === 'Pending');
 
-        table.innerHTML = pending.map(lv => `
-            <tr>
-                <td><b>${lv.WorkerName}</b></td>
-                <td>${lv.Date}</td>
-                <td>${lv.Reason || '-'}</td>
-                <td><span class="badge pending">Pending</span></td>
-                <td>
-                    <div style="display:flex; gap:8px;">
-                        <button class="icon-btn" style="color:var(--status-success);" onclick="processLeave('${lv.ID}', 'Approved')"><i class="material-icons-outlined">check_circle</i></button>
-                        <button class="icon-btn" style="color:var(--status-error);" onclick="processLeave('${lv.ID}', 'Rejected')"><i class="material-icons-outlined">cancel</i></button>
-                    </div>
-                </td>
-            </tr>
-        `).join('');
-    }, null, true);
+    if (pending.length === 0) {
+        table.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:24px; color:var(--text-secondary);">No pending leave requests.</td></tr>';
+        return;
+    }
+
+    table.innerHTML = pending.map(lv => `
+        <tr>
+            <td><b>${lv.WorkerName}</b></td>
+            <td>${lv.Date}</td>
+            <td style="font-size:12px;">${lv.Reason || '-'}</td>
+            <td><span class="badge pending">Pending</span></td>
+            <td>
+                <div style="display:flex; gap:8px;">
+                    <button class="icon-btn" style="color:var(--status-success);" onclick="processLeave('${lv.ID}', 'Approved')"><i class="material-icons-outlined">check_circle</i></button>
+                    <button class="icon-btn" style="color:var(--status-error);" onclick="processLeave('${lv.ID}', 'Rejected')"><i class="material-icons-outlined">cancel</i></button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+};
+
+window.loadWorkerLeaves = function() {
+    const container = document.getElementById('worker-leaves-container');
+    if (!container) return;
+
+    const myLeaves = window.AppData.leaves.filter(lv => lv.WorkerID === currentUser.id);
+    if (myLeaves.length === 0) {
+        container.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-secondary);">You have no leave history.</p>';
+        return;
+    }
+
+    container.innerHTML = `
+        <table class="data-table">
+            <thead><tr><th>Date</th><th>Reason</th><th>Status</th></tr></thead>
+            <tbody>
+                ${myLeaves.map(lv => `
+                    <tr>
+                        <td>${lv.Date}</td>
+                        <td style="font-size:12px;">${lv.Reason || '-'}</td>
+                        <td><span class="badge ${lv.Status === 'Approved' ? 'active' : (lv.Status === 'Pending' ? 'pending' : 'neutral')}">${lv.Status}</span></td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
 };
 
 window.processLeave = function(id, status) {
@@ -1315,148 +1410,138 @@ window.app_saveSettings = function (e) {
 /* =========================================================================
    WORKER-WISE ATTENDANCE OVERVIEW (Main Dashboard)
 ========================================================================= */
-/* =========================================================================
-   WORKER-WISE ATTENDANCE OVERVIEW (Main Dashboard)
-========================================================================= */
 window.loadAttendanceOverview = function() {
     const container = document.getElementById('attendance-reports-container');
     if (!container) return;
 
-    const month = document.getElementById('ov-month').value;
-    const year = document.getElementById('ov-year').value;
+    // Use cached data for blazing speed
+    const workers = window.AppData.workers;
+    const logs = window.AppData.logs;
+    const leaves = window.AppData.leaves;
+    const month = parseInt(document.getElementById('ov-month').value);
+    const year = parseInt(document.getElementById('ov-year').value);
 
-    container.innerHTML = `<div style="text-align:center; padding:40px;"><div class="spinner" style="margin:0 auto;"></div><p style="color:var(--text-secondary); margin-top:12px;">Loading worker-wise overview...</p></div>`;
+    // Filter logs for selected month/year
+    const filteredLogs = logs.filter(l => {
+        if (!l.Date) return false;
+        const parts = l.Date.split("/");
+        return parseInt(parts[1]) === month && parseInt(parts[2]) === year;
+    });
 
-    // Fetch Workers, Logs, and Leaves in parallel
-    Promise.all([
-        apiCallPromise('getWorkers', {}),
-        apiCallPromise('getAttendanceLogs', { month: month.padStart(2, '0'), year: year }),
-        apiCallPromise('getLeaves', {})
-    ]).then(([workersRes, logsRes, leavesRes]) => {
-        const workers = (workersRes || []).filter(w => w.Status === 'Active');
-        const logs = logsRes || [];
-        const leaves = (leavesRes || []).filter(lv => lv.Status === 'Approved');
+    // Filter approved leaves for selected month/year
+    const filteredLeaves = leaves.filter(lv => {
+        if (!lv.Date) return false;
+        const parts = lv.Date.split("/");
+        return parseInt(parts[1]) === month && parseInt(parts[2]) === year && lv.Status === 'Approved';
+    });
+
+    // Determine which workers to show
+    const workersToShow = (currentUser.role === 'Admin' || currentUser.role === 'Manager') 
+        ? workers.filter(w => w.Status === 'Active')
+        : workers.filter(w => w.ID === currentUser.id);
+
+    if (workersToShow.length === 0) {
+        container.innerHTML = '<div class="surface-card" style="text-align:center; padding:48px; color:var(--text-secondary);">No active records found for this period.</div>';
+        return;
+    }
+
+    let htmlContent = '';
+    workersToShow.forEach(worker => {
+        const workerLogs = filteredLogs.filter(l => l.WorkerID === worker.ID);
+        const workerLeaves = filteredLeaves.filter(lv => lv.WorkerID === worker.ID);
         
-        let displayWorkers = (currentUser.role === 'Worker') ? workers.filter(w => w.ID === currentUser.id) : workers;
+        let presentDates = [...new Set(workerLogs.map(l => l.Date))];
+        let leaveDates = workerLeaves.map(lv => lv.Date);
+        
+        // Calculate stats
+        let nightShifts = workerLogs.filter(l => {
+            if (!l.CheckInTime) return false;
+            return l.CheckInTime.includes('PM') && parseInt(l.CheckInTime.split(':')[0]) >= 7;
+        }).length;
 
-        if (displayWorkers.length === 0) {
-            container.innerHTML = `<p style="text-align:center; color:var(--text-secondary); padding:40px;">No records found for this selection.</p>`;
-            return;
+        // Build Day Bubbles
+        let bubblesHtml = '';
+        const daysInMonth = new Date(year, month, 0).getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${d.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
+            const isPresent = presentDates.includes(dateStr);
+            const isOnLeave = leaveDates.includes(dateStr);
+            
+            let statusClass = '';
+            if (isPresent) statusClass = 'bubble-present';
+            else if (isOnLeave) statusClass = 'bubble-leave';
+            else {
+                const bubbleDate = new Date(year, month - 1, d);
+                if (bubbleDate < new Date().setHours(0,0,0,0)) statusClass = 'bubble-absent';
+            }
+            
+            bubblesHtml += `<div class="day-bubble ${statusClass}" title="${dateStr}">${d}</div>`;
         }
 
-        const daysInMonth = new Date(year, month, 0).getDate();
-        let htmlContent = '';
-
-        displayWorkers.forEach(worker => {
-            const workerLogs = logs.filter(l => l.WorkerID === worker.ID);
-            const workerLeaves = leaves.filter(lv => lv.WorkerID === worker.ID);
-            
-            let presentDates = [...new Set(workerLogs.map(l => l.Date))];
-            let leaveDates = workerLeaves.map(lv => lv.Date);
-            
-            // Calculate stats
-            let dayShifts = 0, nightShifts = 0;
-            workerLogs.forEach(l => {
-                if (!l.CheckInTime) return;
-                // Shift detection logic (Customizable)
-                let isNight = l.CheckInTime.includes('PM') || (l.CheckInTime.includes('AM') && parseInt(l.CheckInTime.split(':')[0]) < 6);
-                if (isNight) nightShifts++; else dayShifts++;
-            });
-
-            // Build Day Bubbles
-            let bubblesHtml = '';
-            for (let d = 1; d <= daysInMonth; d++) {
-                const dateStr = `${d.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
-                const isPresent = presentDates.includes(dateStr);
-                const isOnLeave = leaveDates.includes(dateStr);
-                
-                let cls = '';
-                if (isPresent) cls = 'present';
-                else if (isOnLeave) cls = 'leave';
-                else if (new Date(year, month - 1, d) < new Date().setHours(0,0,0,0)) cls = 'absent';
-                
-                bubblesHtml += `<div class="day-bubble ${cls}" title="Day ${d}">${d}</div>`;
-            }
-
-            htmlContent += `
-                <div class="report-card">
-                    <div class="report-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
-                        <div style="display:flex; gap:12px; align-items:center;">
-                            <div class="avatar" style="width:40px; height:40px; font-size:16px;">${worker.Name.charAt(0)}</div>
-                            <div>
-                                <div style="font-weight:600; color:var(--text-primary); text-transform:capitalize;">${worker.Name}</div>
-                                <div style="font-size:12px; color:var(--text-secondary);">${worker.Role}</div>
-                            </div>
-                        </div>
-                        <div class="stats-summary" style="display:flex; gap:16px;">
-                            <div class="stat-pill"><span class="dot present"></span> ${presentDates.length}P</div>
-                            <div class="stat-pill"><span class="dot leave"></span> ${leaveDates.length}L</div>
-                            <div class="stat-pill"><span class="dot night"></span> ${nightShifts}N</div>
-                            <i class="material-icons-outlined" style="font-size:18px; color:var(--text-secondary); margin-left:8px;">expand_more</i>
+        htmlContent += `
+            <div class="report-card animate-slide-up">
+                <div class="report-header" onclick="toggleDetailedLogs('${worker.ID}')">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div class="report-avatar">${worker.Name.charAt(0)}</div>
+                        <div>
+                            <h4 class="worker-name">${worker.Name}</h4>
+                            <p class="worker-id">ID: ${worker.ID.slice(-6)}</p>
                         </div>
                     </div>
-                    
-                    <div class="report-card-body hidden">
-                        <!-- 1-31 Bubbles -->
-                        <div class="calendar-row" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            ${bubblesHtml}
-                        </div>
-                        
-                        <!-- Daily Log Table -->
-                        <div class="table-responsive" style="border:none;">
-                            <table class="data-table" style="font-size:12px;">
-                                <thead>
-                                    <tr style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.05);">
-                                        <th style="padding:8px;">DATE</th>
-                                        <th style="padding:8px;">IN</th>
-                                        <th style="padding:8px;">OUT</th>
-                                        <th style="padding:8px; width:40px;">TYPE</th>
-                                        <th style="padding:8px; text-align:right;">TOTAL</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${workerLogs.map(l => {
-                                        let isN = l.CheckInTime && (l.CheckInTime.includes('PM') || (l.CheckInTime.includes('AM') && parseInt(l.CheckInTime.split(':')[0]) < 6));
-                                        return `<tr>
-                                            <td style="padding:8px;">${l.Date}</td>
-                                            <td style="padding:8px; color:var(--status-success);">${formatTime12h(l.CheckInTime)}</td>
-                                            <td style="padding:8px; color:var(--status-error);">${formatTime12h(l.CheckOutTime)}</td>
-                                            <td style="padding:8px; text-align:center;"><i class="material-icons-outlined" style="font-size:16px; color:${isN?'var(--accent-primary)':'var(--status-warning)'}">${isN?'dark_mode':'light_mode'}</i></td>
-                                            <td style="padding:8px; text-align:right; font-weight:600; color:var(--accent-secondary);">${formatDurationHms(l.TotalHours)}</td>
-                                        </tr>`;
-                                    }).join('')}
-                                    ${workerLeaves.map(lv => `
-                                        <tr style="background:rgba(0,191,255,0.03);">
-                                            <td style="padding:8px;">${lv.Date}</td>
-                                            <td colspan="3" style="padding:8px; color:var(--status-info); font-weight:500;">
-                                                <i class="material-icons-outlined" style="font-size:14px; vertical-align:middle; margin-right:4px;">event_available</i>
-                                                APPROVED LEAVE (${lv.Reason || 'No reason'})
-                                            </td>
-                                            <td style="padding:8px; text-align:right; color:var(--status-info);">0h</td>
-                                        </tr>
-                                    `).join('')}
-                                    ${(workerLogs.length === 0 && workerLeaves.length === 0) ? `<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-secondary);">No logs or leaves recorded for this month.</td></tr>` : ''}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div class="report-summary">
+                        <div class="summary-item"><span class="label">P</span><span class="val">${presentDates.length}</span></div>
+                        <div class="summary-item"><span class="label">L</span><span class="val">${leaveDates.length}</span></div>
+                        <div class="summary-item"><span class="label">N</span><span class="val">${nightShifts}</span></div>
+                        <i class="material-icons-outlined" style="font-size:18px; color:var(--text-secondary); margin-left:8px;">expand_more</i>
                     </div>
                 </div>
-            `;
-        });
-
-        container.innerHTML = htmlContent;
-
-    }).catch(err => {
-        console.error("Overview Load Error:", err);
-        container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--status-error);"><i class="material-icons-outlined" style="font-size:48px;">error_outline</i><p>${err.message}</p></div>`;
+                
+                <div class="calendar-row">
+                    ${bubblesHtml}
+                </div>
+                
+                <div id="details-${worker.ID}" class="detailed-logs hidden" style="margin-top:16px; border-top:1px solid rgba(255,255,255,0.05); padding-top:16px;">
+                    <div class="table-responsive">
+                        <table class="logs-table" style="width:100%; font-size:12px;">
+                            <thead>
+                                <tr style="text-align:left; color:var(--text-secondary);">
+                                    <th>DATE</th>
+                                    <th>IN</th>
+                                    <th>OUT</th>
+                                    <th style="text-align:right;">TOTAL</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${workerLogs.map(l => `
+                                    <tr>
+                                        <td>${l.Date}</td>
+                                        <td style="color:var(--status-success);">${formatTime12h(l.CheckInTime)}</td>
+                                        <td style="color:var(--status-error);">${formatTime12h(l.CheckOutTime)}</td>
+                                        <td style="text-align:right; font-weight:600;">${formatDurationHms(l.TotalHours)}</td>
+                                    </tr>
+                                `).join('')}
+                                ${workerLeaves.map(lv => `
+                                    <tr style="background:rgba(0,191,255,0.03);">
+                                        <td>${lv.Date}</td>
+                                        <td colspan="2" style="color:var(--status-info);">LEAVE: ${lv.Reason || '-'}</td>
+                                        <td style="text-align:right; color:var(--status-info);">0h</td>
+                                    </tr>
+                                `).join('')}
+                                ${(workerLogs.length === 0 && workerLeaves.length === 0) ? `<tr><td colspan="4" style="text-align:center; padding:12px; color:var(--text-secondary);">No logs found.</td></tr>` : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
     });
+
+    container.innerHTML = htmlContent;
 };
 
-// Helper for Fetching using apiCall with Promise
-function apiCallPromise(action, data) {
-    return new Promise((resolve, reject) => {
-        apiCall(action, data, (res) => resolve(res), (err) => reject(new Error(err)), true);
-    });
+function toggleDetailedLogs(workerId) {
+    const el = document.getElementById('details-' + workerId);
+    if (el) el.classList.toggle('hidden');
 }
 
 

@@ -159,8 +159,8 @@
 
                 <form id="login-form" onsubmit="handleLogin(event)">
                     <div class="form-group" style="text-align: left;">
-                        <label class="form-label">Phone Number</label>
-                        <input type="tel" id="login-phone" class="form-input" placeholder="Enter phone" required>
+                        <label class="form-label">Email Address</label>
+                        <input type="email" id="login-email" class="form-input" placeholder="Enter email" required>
                     </div>
                     <div class="form-group" style="text-align: left;">
                         <label class="form-label">Password</label>
@@ -179,6 +179,10 @@
                     <div class="form-group" style="text-align: left;">
                         <label class="form-label">Full Name</label>
                         <input type="text" id="signup-name" class="form-input" placeholder="Your full name" required>
+                    </div>
+                    <div class="form-group" style="text-align: left;">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" id="signup-email" class="form-input" placeholder="Enter email" required>
                     </div>
                     <div class="form-group" style="text-align: left;">
                         <label class="form-label">Phone Number</label>
@@ -295,17 +299,24 @@
         <!-- ATTENDANCE VIEW -->
         <div id="template_attendance">
             <!-- Header Row -->
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px; flex-wrap:wrap; gap:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; flex-wrap:wrap; gap:16px;">
                 <h2 style="font-size: 24px; font-weight:700; display:flex; align-items:center; gap:12px;">
                     <span style="width:12px; height:12px; background:var(--accent-secondary); border-radius:50%; box-shadow:0 0 10px var(--accent-secondary);"></span>
-                    Attendance — Geo-Fenced
+                    Attendance Hub
                 </h2>
                 <div style="display:flex; gap:12px;">
-                    <button class="btn-secondary" onclick="openApplyLeave()" style="border-radius:20px; background:rgba(140,82,255,0.1); border-color:var(--accent-primary); color:var(--accent-primary);"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle;">event_available</i> Apply Leave</button>
-                    <button class="btn-secondary" onclick="document.getElementById('attendance-reports-container').scrollIntoView({behavior:'smooth'})" style="border-radius:20px; background:rgba(255,255,255,0.05); border:none;"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle; color:var(--status-info);">summarize</i> Monthly Overview</button>
-                    <button class="btn-primary" style="border-radius:20px; width:auto; padding:10px 20px; background:var(--accent-gradient); box-shadow:0 0 15px rgba(140,82,255,0.4);"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle;">settings</i> Configure Fence</button>
+                    <button class="btn-primary" style="border-radius:20px; width:auto; padding:10px 20px; background:var(--accent-gradient); box-shadow:0 0 15px rgba(140,82,255,0.4);" onclick="navigate('settings')"><i class="material-icons-outlined" style="font-size:18px; vertical-align:middle;">settings</i> Config</button>
                 </div>
             </div>
+
+            <!-- Sub-Tabs Navigation -->
+            <div class="sub-tabs" style="display:flex; gap:24px; margin-bottom:24px; border-bottom:1px solid var(--border-color);">
+                <button class="sub-tab active" id="tab-att-logs" onclick="switchAttTab('logs')" style="padding:12px 4px; border:none; background:none; color:var(--text-primary); border-bottom:2px solid var(--accent-primary); font-weight:600; cursor:pointer;">Attendance Logs</button>
+                <button class="sub-tab" id="tab-att-leaves" onclick="switchAttTab('leaves')" style="padding:12px 4px; border:none; background:none; color:var(--text-secondary); cursor:pointer;">Manage Leaves</button>
+            </div>
+
+            <!-- TAB 1: LOGS -->
+            <div id="att-view-logs">
 
             <!-- Dashboard Grid -->
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom:24px;">
@@ -447,32 +458,35 @@
                     </div>
                 </div>
 
-                <!-- Leave Approvals UI (Admin Only) -->
-            <div id="admin-leave-approvals" class="hidden" style="margin-top: 24px;">
-                <h3 style="margin-bottom: 16px; display:flex; align-items:center; gap:8px;"><i class="material-icons-outlined" style="color:var(--accent-primary);">approval</i> Pending Leave Requests</h3>
+            </div> <!-- End att-view-logs -->
+
+            <!-- TAB 2: LEAVES -->
+            <div id="att-view-leaves" class="hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                    <h3>All Leaves</h3>
+                    <button class="btn-primary" onclick="openApplyLeave()" style="width:auto; padding:10px 24px; border-radius:30px;"><i class="material-icons-outlined" style="vertical-align:middle; font-size:18px;">add</i> Apply Leave</button>
+                </div>
+                
+                <!-- Pending Leaves list (Already existing logic) -->
+                <div id="admin-leave-approvals" class="hidden">
+                    <h4 style="margin-bottom:16px;">Pending Leave Requests</h4>
+                    <div class="surface-card">
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead><tr><th>Worker</th><th>Date</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+                                <tbody id="leaves-approval-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div style="margin:24px 0;"></div>
+                </div>
+
                 <div class="surface-card">
-                    <div class="table-responsive">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Worker</th>
-                                    <th>Date</th>
-                                    <th>Reason</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="leaves-approval-tbody">
-                                <tr><td colspan="5" style="text-align:center; padding:24px;">Loading requests...</td></tr>
-                            </tbody>
-                        </table>
+                    <h4 style="margin-bottom:16px;">My Recent Leaves</h4>
+                    <div id="worker-leaves-container" class="table-responsive">
+                         <p style="text-align:center; padding:20px; color:var(--text-secondary);">Loading records...</p>
                     </div>
                 </div>
-            </div>
-
-            <!-- Dashboard / Monthly Reports -->
-            <div id="attendance-reports-container" class="attendance-reports-grid" style="margin-top: 24px;">
-                <!-- Cards injected here -->
             </div>
         </div>
             <style>
